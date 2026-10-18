@@ -4,6 +4,10 @@ This document explains the **first two stages** of the plan in
 [`docs/DESIGN.md`](DESIGN.md). It is written for a beginner: every tool and
 special word is explained the first time it appears.
 
+The full technology choices (and why) live in [`docs/STACK.md`](STACK.md): a
+**Java Spring Boot API**, a **React + AWS Cloudscape UI**, a **Python AI
+service**, **Rust→WASM modules**, **PostgreSQL**, and **MinIO + Redis**.
+
 We are building the part that proves the idea works: that a piece of code sent in
 by a stranger can be **built**, **checked for correctness**, and **ranked** — all
 without giving away the company's secrets.
@@ -19,9 +23,12 @@ designed to accept any language the task committee names).
 
 | Layer | Our choice | Why (in plain words) |
 |---|---|---|
-| The main website ("control plane") | **Java 21 + Spring Boot 3** | Spring Boot is a popular kit for building web servers in Java; it already matches the `oct/java/` folder. |
+| The main website ("control plane") | **Java 21 + Spring Boot 4** | Spring Boot is a popular kit for building web servers in Java; it already matches the `oct/java/` folder. |
 | Build tool for our own code | **Maven** (with a "wrapper") | Maven assembles our project and its libraries. A "wrapper" ships the tool *with* the project so the build does not depend on what is installed on the computer. |
-| Databases | **H2** while developing, **Postgres** in production | A database is where we store records. H2 needs no setup for local work; Postgres is the serious one for the real system. |
+| Database | **PostgreSQL 16+**, with **Testcontainers** for tests | A database is where we store records. We use Postgres for real in every environment (never H2 — it behaves differently and gives false confidence). |
+| UI console | **React + AWS Cloudscape** | Amazon's own open-source design system gives the AWS-console look. |
+| AI service | **Python + FastAPI** | Help for writing tasks and submissions, behind a model gateway. |
+| Artifacts / queue | **MinIO (S3) + Redis** | Store submitted files; run and rate-limit evaluation jobs. |
 | Worker languages | **Any language the task names** | For `optimize`, the committee sets it from the existing software. Java and Rust are simply the first two the platform can build; more are added through a **toolchain registry**. |
 | Java build | **javac** (the standard Java compiler), version 21, fixed | Compiles the worker's Java.
 | Rust build | **rustc** (the standard Rust compiler), fixed | Compiles the worker's Rust.
@@ -50,25 +57,25 @@ A map of the folders, with a note on what lives where:
 ```
 symmetry/
   docs/                        # these design documents
-  agreements/                  # the rules a worker must accept (see M1b)
-  contracts/                   # published job cards, stored as small files
-  tasks/                       # task documents (readable text + checklist)
-  examples/image-resize/       # our first practice module
+  deploy/                      # docker-compose: Postgres, MinIO, Redis, Keycloak
   platform/                    # the main website + the evaluator (one program)
     pom.xml                     # Maven's list of what to build and which libraries
     src/main/java/io/symmetry/
-      contract/    # the job-card objects and their rules
-      task/        # task-document objects and acceptance records
-      submission/  # a worker's sent-in code
-      build/       # the toolchain registry (Java and Rust to start)
-      disclosure/  # decides how much may be revealed safely
-      eval/        # the sandboxes and the checkpoints ("hunters")
-      scoring/     # the Pareto ranking and the leaderboard
-      trust/       # identity and reputation
-      store/       # database saving and loading
-      api/         # the web addresses ("buttons") listed in DESIGN section 11
-    src/test/java/io/symmetry/  # our own tests
-  workbench-cli/               # the worker's tool (empty placeholder for now)
+      PlatformApplication.java
+      config/      # security wiring (JWT optional; off for local dev)
+      contract/    # job-card object, rules, validator, disclosure, acceptance
+      task/        # work kind + lifecycle labels (the "sockets")
+      build/       # toolchain registry + Java/Rust connectors
+      eval/        # keycard + checker/gate types (sandboxes land in M3)
+      scoring/     # flexible metric vector (Pareto ranking lands in M5)
+      # planned: submission/ , trust/ , store/ , api/
+    src/main/resources/db/migration/   # Flyway V1, V2
+    src/test/java/io/symmetry/         # our own tests
+  ui/                          # React + AWS Cloudscape console (Vite)
+  ai/                          # Python FastAPI AI service
+  wasm-sdk/                    # Rust module SDK; modules/image-resize is the ABI example
+  .github/workflows/           # CI: Maven, npm, pip, cargo
+  # planned: agreements/ , contracts/ , tasks/ , examples/image-resize/ (M2) , workbench-cli/
 ```
 
 (You do not need to memorize this. It is here so a builder knows where things go.)
@@ -125,13 +132,19 @@ runtime: <language set by the task>
 
 **In our own code**, each of these files becomes a **record** — a simple,
 unchangeable object in Java that holds the fields. We check the card is sensible
-when we load it: the limits must be positive, the invariants must not be empty,
-the language must exist in the toolchain registry, the tier must be L0, L1, or L2,
-and the task document must actually exist.
+when we load it: the limits must be positive, the invariants must not be empty, the
+language must exist in the toolchain registry, the tier must be L0, L1, or L2, and
+the task document must not be empty. The job card also carries a **work kind**
+(`compute` in V1; `service`/`ui`/`data`/`system` are reserved) and a **lifecycle
+state** (`draft → negotiated → accepted → submitted → judged → merged`).
 
 **The "I agree" step.** A worker calls an address to **accept** the task document.
-We store a signed record: who accepted, and the fingerprint of the exact task
-document they saw. **If a submission has no matching acceptance, it is refused.**
+We store a signed record: who accepted, the fingerprint of the exact task document
+they saw, and that they accepted the required agreements. The signature is an
+**Ed25519** signature (a built-in JDK 21 method) over a short message that binds the
+worker to that **contract version** and document fingerprint. **If a submission has
+no matching acceptance, it is refused** — and an acceptance whose signature does not
+verify is rejected.
 
 **The web addresses ("buttons") we build in M1:**
 
@@ -190,6 +203,11 @@ never buried in a long legal wall of text):
 **Done when:** a module whose assessment is "do not publish" cannot be published;
 a submission missing the required agreements is refused; submissions that lean
 heavily on AI are flagged for a human to review.
+
+**Status:** the agreements-on-accept gate and the **tier-filtered workbench** are in
+place (`DisclosureService`, `GET /contracts/{id}/{version}/workbench`); the
+`DisclosureAssessor` itself (the verdict that decides *whether* a module may be
+published) is the next M1b task.
 
 ---
 
@@ -324,7 +342,7 @@ the leaderboard shows the correct Pareto order.
 |---|---|---|
 | Unit tests | JUnit 5 | small pieces: contract rules, acceptance gating, Pareto math, tier filtering |
 | Property tests | jqwik | "always true" rules and scoring behavior |
-| Integration tests | Spring Boot Test + H2 | the web addresses work end to end, including the accept flow |
+| Integration tests | Spring Boot Test + Testcontainers Postgres | the web addresses work end to end, including the accept flow |
 | Adversarial tests | hand-built bad modules (Java + Rust) | forbidden access, infinite loops, unpredictability, overfitting to the exam |
 | Reproducibility | repeated runs | the same source always gives the same verdict |
 

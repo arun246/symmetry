@@ -150,6 +150,12 @@ Each is a place future kinds of work can attach without touching the center.
 **With these sockets, adding a web-page runner later is just plugging in a new
 appliance. Without them, it is a full rebuild.**
 
+**Status (this build).** Sockets 1 (work kind), 7 (lifecycle), 6 (toolchain
+registry), 5 (keycard), 3 (the gate as a list of checkers), and 4 (flexible named
+metrics) now exist as types in `platform/`. Socket 2 (the runner connector) is
+declared but filled in only in M3. The first cell — compute — is the only one wired
+up; every other value is a label waiting for its runner.
+
 ---
 
 ## 6. Install now, or wait?

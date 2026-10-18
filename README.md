@@ -89,6 +89,9 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
   to Java and Rust.
 - **How we judge:** correctness first, then speed and memory (for `optimize`); a
   quality rubric and milestone reviews (for `build`).
+- **Built with:** a **Java Spring Boot API**, **Rust→WASM** modules, a **Python AI**
+  service, **PostgreSQL**, and a **React + AWS Cloudscape** UI. See
+  [docs/STACK.md](docs/STACK.md).
 - **The hard problem:** verify without leaking.
 
 ---
@@ -96,6 +99,8 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
 ## Read next
 
 - [docs/DESIGN.md](docs/DESIGN.md) — the full design, explained plainly.
+- [docs/STACK.md](docs/STACK.md) — the technology stack: services, libraries,
+  database choice, and the AI plan.
 - [docs/NEW-BUILDS.md](docs/NEW-BUILDS.md) — building brand-new apps: proposals,
   design, rates, milestones, and the quality bar.
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how to build the first parts.

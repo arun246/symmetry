@@ -30,6 +30,12 @@ There is also a second kind of work, described in
 a worker proposes a **design, a plan, and a rate of pay**, and the work is done in
 **milestones**.
 
+In technology terms, Symmetry is **four services**: a **Java Spring Boot API** (the
+control plane), a **React + AWS Cloudscape** console (the website), a **Python AI
+service** (help writing tasks and submissions), and **Rust→WASM** modules, sitting
+on **PostgreSQL** with **MinIO + Redis**. The choices and reasons are in
+[`STACK.md`](STACK.md).
+
 **Target:** proprietary (closed, company-owned) software.
 **Two kinds of work:** `optimize` an existing module, or `build` a new app.
 **How we measure success:** correctness first, then speed and memory (for
@@ -176,6 +182,9 @@ we fix the exact tool version so the build comes out the same every time.
 10. Audit Ledger — an append-only history, so nothing can be quietly changed.
 11. Integration SDK — the company's toolkit to pull a winner back in.
 
+The concrete tools each component is built with (Java/Spring, React/Cloudscape,
+Python/FastAPI, Rust/WASM, PostgreSQL) are listed in [`STACK.md`](STACK.md).
+
 ---
 
 ## 5. The job card: contract + task document
@@ -187,6 +196,7 @@ notes on each line:
 contract module.image.resize {
   version: 1.4.0
   task_kind: optimize | build   // existing module, or a brand-new app
+  work_kind: compute            // V1 uses compute; service/ui/data/system reserved
   task_document: ref:docs/tasks/image-resize.md    // the instructions to accept first
   language: <any>              // for `optimize`: set by the committee from the
                               // existing software; for `build`: proposed by the worker

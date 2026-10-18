@@ -1,0 +1,76 @@
+name: symmetry
+
+# Local development infrastructure for Symmetry.
+# Start with:  docker compose -f deploy/docker-compose.yml up -d
+# Everything here is for local development only; use managed services in production.
+#
+# The AI service reaches a hosted/LiteLLM gateway through SYMMETRY_AI_BASE_URL, so
+# the gateway is not part of this file. Run LiteLLM separately if you want to
+# self-host a model.
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    container_name: symmetry-postgres
+    environment:
+      POSTGRES_DB: symmetry
+      POSTGRES_USER: symmetry
+      POSTGRES_PASSWORD: symmetry
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U symmetry -d symmetry"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2025-10-15T17-29-55Z
+    container_name: symmetry-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: symmetry
+      MINIO_ROOT_PASSWORD: symmetry123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4.11-alpine
+    container_name: symmetry-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Keycloak's image has no shell, so it has no healthcheck; wait for the log line
+  # "started" instead. Its own dev-mode store is H2? No: start-dev uses the
+  # in-memory dev store; that is Keycloak's internal business, not our app's data.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    container_name: symmetry-keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8180:8080"
+
+volumes:
+  pgdata:
+  miniodata:
+  redisdata:

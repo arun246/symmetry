@@ -1,0 +1,8 @@
+# Rust build output (crates, dependencies, .wasm artifacts)
+target/
+**/*.wasm
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

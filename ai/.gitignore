@@ -1,0 +1,22 @@
+# Python bytecode and virtualenvs
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Packaging / test caches
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
