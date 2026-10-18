@@ -18,14 +18,22 @@ on memory. But they cannot show the secret code to strangers.
 
 Symmetry lets them ask the outside world for help **without giving away the
 secret**. The company publishes a **contract** (a machine-readable job card) and a
-**task document** (plain-language instructions). An outside **worker** picks the
-language that matches the company's existing module — **Java or Rust** — accepts
-the task document, and submits source code. The platform builds and tests that
-code privately. Correct submissions are ranked by speed and memory. The best one
-is paid and added to the company's system.
+**task document** (plain-language instructions). An outside **worker** uses the
+language the company's **task committee** says its existing software is written in
+— Java, C, Go, Python, TypeScript, or several at once — accepts the task document,
+and submits source code. The platform builds and tests that code privately.
+Correct submissions are ranked by speed and memory. The best one is paid and added
+to the company's system.
 
-**Target:** proprietary modules.
-**How we measure success:** correctness first, then speed and memory.
+There is also a second kind of work, described in
+[`NEW-BUILDS.md`](NEW-BUILDS.md): a **brand-new** app with no existing code, where
+a worker proposes a **design, a plan, and a rate of pay**, and the work is done in
+**milestones**.
+
+**Target:** proprietary (closed, company-owned) software.
+**Two kinds of work:** `optimize` an existing module, or `build` a new app.
+**How we measure success:** correctness first, then speed and memory (for
+`optimize`); a quality rubric and milestone reviews (for `build`).
 
 ---
 
@@ -62,9 +70,10 @@ sports league: if we cannot score the game, we do not play it.
 These are the promises that keep the system honest.
 
 1. **Correctness is a gate, never a score.** Fast-but-wrong loses to slow-but-right.
-2. **The language follows the existing module.** The worker picks Java or Rust so
-   the finished part drops straight into the company's codebase. The task document
-   fixes which language is allowed.
+2. **The language follows the task.** For `optimize` work, the language is whatever
+   the task-submitting committee says the existing software uses. For `build` work,
+   the worker proposes the language and the committee approves it. Adding a new
+   language should mean plugging in a new compiler, never editing the center.
 3. **No work without consent.** A worker must explicitly accept the task document
    before their submission counts. The acceptance is recorded, like signing a form.
 4. **Never move the secret data — move the checker.** Testing happens where the
@@ -93,7 +102,7 @@ Here is the same diagram, then explained box by box.
      ┌──────────▼─────────┐  ┌────────▼─────────┐   ┌─────────▼──────────┐
      │ Worker Workbench     │  │ Synthetic Data   │   │ Integration SDK    │
      │ CLI + web IDE        │  │ Service          │   │ (company repo side)│
-     │ Java or Rust (chosen)│  │                  │   │                    │
+     │ language per task    │  │                  │   │                    │
      └──────────┬──────────┘  └──────────────────┘   └─────────┬──────────┘
                 │ submit signed source + accepted task doc      │ pull winner
                 ▼                                               ▼
@@ -117,7 +126,8 @@ do the heavy work itself — it *coordinates*.
 
 **The Worker Workbench** is the tool a worker uses to do the job: a command-line
 tool and a web editor. It can fetch the public part of the contract and some
-made-up sample data, but never the secrets. The worker chooses Java or Rust here.
+made-up sample data, but never the secrets. It supports whichever language the task
+calls for, pulling the right compiler from the **toolchain registry**.
 
 **The Synthetic Data Service** makes fake-but-realistic sample data. Think of
 "practice questions" that feel like the real exam but are not the real exam.
@@ -134,10 +144,10 @@ is **federated**, meaning it can run in more than one place at once:
   locked safe room inside a computer where code runs and even the room's owner
   cannot peek inside.
 
-**The build step** turns the worker's source code into something runnable. If the
-worker wrote Java, we compile it with `javac` (the standard Java compiler). If they
-wrote Rust, we compile it with `rustc`. "Pinned" means we fix the exact tool
-version so the build comes out the same every time.
+**The build step** turns the worker's source code into something runnable. We pick
+the compiler based on the language the task declares, from a **toolchain registry**
+(Java, Rust, C, Go, Python, TypeScript, and so on — added over time). "Pinned" means
+we fix the exact tool version so the build comes out the same every time.
 
 **Trust boundaries** are the lines where the level of trust changes:
 
@@ -155,8 +165,9 @@ version so the build comes out the same every time.
 1. Contract Registry — the list of job cards, with versions and rules.
 2. Task Documents — the human-readable requirements plus a machine-readable
    checklist the worker must accept.
-3. Worker Workbench — the worker's tools; Java or Rust.
-4. Build Service — runs `javac` or `rustc` and produces a fingerprintable result.
+3. Worker Workbench — the worker's tools; language per task.
+4. Build Service — compiles or interprets the source via the toolchain registry and
+   produces a fingerprintable result.
 5. Synthetic Data Service — realistic sample data, never the real data.
 6. Eval Fabric — the federated build-and-test machines.
 7. Scoring & Leaderboard — the gate and the rankings.
@@ -175,8 +186,10 @@ notes on each line:
 ```
 contract module.image.resize {
   version: 1.4.0
+  task_kind: optimize | build   // existing module, or a brand-new app
   task_document: ref:docs/tasks/image-resize.md    // the instructions to accept first
-  language: java | rust        // worker chooses; must match the existing module
+  language: <any>              // for `optimize`: set by the committee from the
+                              // existing software; for `build`: proposed by the worker
   signature: (in: Image, w: u32, h: u32, filter: enum) -> Image
   license: company-proprietary / contributor-assignment
   disclosure_tier: L1            // how much we reveal (see below)
@@ -190,8 +203,12 @@ contract module.image.resize {
 ```
 
 - **version** — job cards change over time; this is which version.
+- **task_kind** — `optimize` (improve existing code) or `build` (make a new app).
+  The rest of this section describes `optimize`; see `NEW-BUILDS.md` for `build`.
 - **task_document** — the plain-language instructions (see below).
-- **language** — Java or Rust. The worker picks to match the existing module.
+- **language** — for `optimize`, set by the committee from the existing software
+  (any language, not just Java or Rust); for `build`, proposed by the worker and
+  approved by the committee.
 - **signature** — the shape: what goes in, what comes out. For an image-resize
   module: take an image, a width, a height, and a filter choice; give back an image.
 - **license** — what rights the worker gives the company in exchange for pay.
@@ -221,7 +238,7 @@ requirements:
   - "alpha channel preserved"
   - "no network / filesystem / threads"
 done_criteria: "all hidden property + holdout tests pass; artifact within budget"
-runtime: java | rust
+runtime: <language set by the committee>
 ```
 
 **Consent matters.** A worker must explicitly accept the task document before
@@ -288,6 +305,14 @@ against the old code; and we never trust numbers a worker reports about themselv
 This defends against the "when a measure becomes a target, it stops being a good
 measure" trap.
 
+### For `build` work (new apps)
+
+There is no old code to compare against, so the answer key is **written from the
+requirements** instead. The brief's **acceptance criteria** become the tests, and
+correctness is joined by a **quality rubric** (security, maintainability,
+licensing, deployability) and **milestone reviews** by people. This is covered in
+full in [`NEW-BUILDS.md`](NEW-BUILDS.md).
+
 ---
 
 ## 7. How workers get paid and trusted (marketplace)
@@ -302,6 +327,10 @@ measure" trap.
   accounts ("Sybil") is blocked by identity limits and caps on new accounts.
 - **Disputes:** there is a waiting period. A disputed result can be re-checked on a
   second, independent runner.
+- **New-build pay is different.** For `build` work, pay is hourly and/or fixed-price
+  per **milestone**, released as milestones pass — never a blank check for hours.
+  The full model (proposals, rates, quality bar, anti-padding rules) is in
+  [`NEW-BUILDS.md`](NEW-BUILDS.md).
 
 ---
 
@@ -316,6 +345,8 @@ measure" trap.
   so they never travel across the platform.
 - **Supply chain:** every artifact is signed, listed in a bill of materials
   (SBOM — a list of what is inside), built reproducibly, and re-checked before merge.
+  Dependencies are checked against an allowed-license list, so a copyleft or
+  forbidden license cannot slip in unnoticed.
 - **Legal:** liability and indemnity terms, and which country's law applies, are
   set per contract.
 
@@ -363,6 +394,10 @@ Each of these is a "thing" the system remembers:
 - **AuditEvent** — one recorded event in the history.
 - **MergeRecord** — proof that a part was added to the real product.
 
+The `build` track stores extra things — **Brief**, **Proposal**, **ReviewScore**,
+**Milestone**, **RateCard**, **WorkLogEntry**, **QualityReport**, and **Handover**.
+They are listed in [`NEW-BUILDS.md`](NEW-BUILDS.md).
+
 ---
 
 ## 11. The buttons and doors (API surface)
@@ -382,6 +417,9 @@ POST /bounties/{id}/award             release the reward
 POST /integrations/{id}/merge         add the winner to the real product
 ```
 
+The `build` track adds more doors (proposals, milestones, quality reports,
+handover). They are listed in [`NEW-BUILDS.md`](NEW-BUILDS.md).
+
 ---
 
 ## 12. What can go wrong, and when to stop
@@ -392,7 +430,7 @@ POST /integrations/{id}/merge         add the winner to the real product
 | A secret leaks through the shape or the sample data | disclosure tiers; TEE | any real leak happens |
 | People game the scores | rotating secret questions; Pareto | scores go up but the product does not improve |
 | Integration costs more than it saves | toolkit; feature flags; re-checking | the total cost is the same or higher than building in-house |
-| Java is hard to run safely in the sandbox | run it in a locked-down container (see IMPLEMENTATION) | a sandbox escape or an untrustworthy measurement |
+| A language is hard to run safely in the sandbox | run it in a locked-down container (see IMPLEMENTATION); add a language to the registry only once it can run safely | a sandbox escape or an untrustworthy measurement |
 | Fake accounts abuse trust | reputation; caps; escrow | any payout fraud |
 | Too few modules are verifiable | an eligibility filter | fewer than a set number of contracts per quarter |
 
@@ -412,10 +450,11 @@ Each step has a clear "we are done when" test.
 2. **P1 Contract & task document (2–4 weeks).** Build one real contract and task
    document, with the acceptance flow. *Done when:* ten people can read it and
    correctly predict what will pass and what will fail, and acceptance is enforced.
-3. **P2 Eval Fabric (4–8 weeks).** The build service for both Java and Rust, the
-   sandboxes, the checkpoints (properties, fuzzing, comparison, hidden questions),
-   and the measurements. *This is the hardest 80% of the work.* *Done when:*
-   results repeat exactly, there are no side doors, and both languages work.
+3. **P2 Eval Fabric (4–8 weeks).** The build service (starting with Java and Rust)
+   via the toolchain registry, the sandboxes, the checkpoints (properties, fuzzing,
+   comparison, hidden questions), and the measurements. *This is the hardest 80% of
+   the work.* *Done when:* results repeat exactly, there are no side doors, and the
+   first languages work.
 4. **P3 Trust & IP (3–5 weeks).** The locked safe room (TEE) or on-premise node,
    signing, the audit ledger, and the rights flow. *Done when:* the secret tests
    never leave the company's machine.
@@ -423,8 +462,13 @@ Each step has a clear "we are done when" test.
    when:* money can move safely.
 6. **P5 Integration (ongoing).** The toolkit, the human review gate, merging, and
    rollback. *Done when:* one crowd-built part is running in production.
-7. **P6 Scale.** Generalize to more kinds of modules. Add AI help for *writing the
-   task documents and tests* — not for secretly writing the answers.
+7. **P6 Proposals & review (the `build` track).** Briefs, proposals (design + plan
+   + rate), rubric scoring, and an optional design bake-off.
+8. **P7 Milestones & quality gate (the `build` track).** Milestone escrow,
+   automated quality scans (tests, security, dependency/license), human review, and
+   handover.
+9. **P8 Scale.** Generalize to more languages and kinds of modules. Add AI help for
+   *writing the task documents and tests* — not for secretly writing the answers.
 
 ---
 
@@ -432,8 +476,9 @@ Each step has a clear "we are done when" test.
 
 Start tiny: one company, one kind of module, one evaluator machine, sample data at
 tier L1, a leaderboard, and **no money at all**. The contract format and the build
-service support both Java and Rust from day one, but the first proof may launch with
-only the language the existing code uses.
+service are built to support **any language** through the toolchain registry, but
+the first proof may launch with only the language the existing code uses (Java and
+Rust are simply the first two compilers). The `build` track comes later.
 
 The goal of the MVP is narrow: prove that **crowd-built code can be verified and
 can beat the old code**. Do that before adding locked rooms (TEEs) or payments.
@@ -442,10 +487,14 @@ can beat the old code**. Do that before adding locked rooms (TEEs) or payments.
 
 ## 15. Things we have not decided yet
 
-- Which language the first module uses (Java or Rust).
+- Which language the first module uses (whichever the existing software is written
+  in; Java and Rust are the first two compilers we support).
+- When to add the `build` track (proposals, rates, milestones) — see P6–P7 above.
 - The Java sandbox path — a locked-down container, or the discouraged Java-to-WASM
   route (see `docs/IMPLEMENTATION.md` for why the container is preferred).
 - Whether to use a TEE now or an on-premise node later.
 - Who writes the task documents and hidden tests — the company's engineers or a
   platform team.
 - The exact rule for "verifiable enough" to be allowed in.
+- For `build` work: the default pay shape, rubric weights, and how strict the
+  proposal trust tiers are (see `docs/NEW-BUILDS.md`).

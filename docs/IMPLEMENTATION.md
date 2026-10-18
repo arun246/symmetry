@@ -10,7 +10,8 @@ without giving away the company's secrets.
 
 We assume stage P0 is done: we have picked one kind of module, **image resizing**
 (making an image bigger or smaller), and decided which language the existing code
-uses (default: **Java**; Rust works the same way).
+uses (in this example, **Java**; Rust is built the same way — and the platform is
+designed to accept any language the task committee names).
 
 ---
 
@@ -21,7 +22,7 @@ uses (default: **Java**; Rust works the same way).
 | The main website ("control plane") | **Java 21 + Spring Boot 3** | Spring Boot is a popular kit for building web servers in Java; it already matches the `oct/java/` folder. |
 | Build tool for our own code | **Maven** (with a "wrapper") | Maven assembles our project and its libraries. A "wrapper" ships the tool *with* the project so the build does not depend on what is installed on the computer. |
 | Databases | **H2** while developing, **Postgres** in production | A database is where we store records. H2 needs no setup for local work; Postgres is the serious one for the real system. |
-| Worker languages | **Java and Rust** | A worker picks whichever matches the company's existing module. Both are treated the same. |
+| Worker languages | **Any language the task names** | For `optimize`, the committee sets it from the existing software. Java and Rust are simply the first two the platform can build; more are added through a **toolchain registry**. |
 | Java build | **javac** (the standard Java compiler), version 21, fixed | Compiles the worker's Java.
 | Rust build | **rustc** (the standard Rust compiler), fixed | Compiles the worker's Rust.
 | Running untrusted Java | **A locked-down container (JVM tier)** | We run risky code inside an isolated box so it cannot harm anything. This is the *preferred* Java path. (Earlier we considered turning Java into WASM — a different format — but that throws away Java's speed tricks and measures the wrong thing. It is now a discouraged exception.) |
@@ -29,10 +30,16 @@ uses (default: **Java**; Rust works the same way).
 | Property tests | **jqwik** (Java) / **proptest** (Rust) | Tools that test code with *many* randomly generated inputs, checking that a rule is *always* true. |
 | Task documents | **Markdown (readable text) + a machine-readable checklist** | The worker reads it and accepts it before starting. |
 
-**Why two ways to run code:** the platform has to handle two languages, so it has
-two "runners." Rust modules become WASM (very safe to run). Java modules run in a
-locked-down container (also safe, and it keeps Java fast). This is called being
-**polyglot** — able to work with more than one language.
+**Why two ways to run code:** the platform has to handle more than one language, so
+it has more than one "runner." Rust modules become WASM (very safe to run). Java
+modules run in a locked-down container (also safe, and it keeps Java fast). This is
+called being **polyglot** — able to work with more than one language.
+
+**Not only two languages.** Java and Rust are just the first two entries in a
+**toolchain registry**. Adding C, Go, Python, or TypeScript later means plugging in
+a new compiler, not changing the center. (A second, quite different kind of work —
+building brand-new apps, with proposals and hourly rates — is described in
+[`NEW-BUILDS.md`](NEW-BUILDS.md), and comes after this plan.)
 
 ---
 
@@ -53,7 +60,7 @@ symmetry/
       contract/    # the job-card objects and their rules
       task/        # task-document objects and acceptance records
       submission/  # a worker's sent-in code
-      build/       # the compilers (Java and Rust)
+      build/       # the toolchain registry (Java and Rust to start)
       disclosure/  # decides how much may be revealed safely
       eval/        # the sandboxes and the checkpoints ("hunters")
       scoring/     # the Pareto ranking and the leaderboard
@@ -74,8 +81,9 @@ symmetry/
 (the job card) and the acceptance flow.
 
 **The job card, as a file.** Here is the same card from the design doc, as a file
-the computer can read. The `language` line is `java` or `rust`, chosen by the
-worker to match the existing module:
+the computer can read. The `language` line names the language from the registry (in
+this example, `java`); for `optimize` work the committee sets it, and for `build`
+work the worker proposes it:
 
 ```json
 {
@@ -112,14 +120,14 @@ requirements:
   - "alpha channel preserved"
   - "no network / filesystem / threads"
 done_criteria: "all hidden property + holdout tests pass; artifact within budget"
-runtime: java | rust
+runtime: <language set by the task>
 ```
 
 **In our own code**, each of these files becomes a **record** — a simple,
 unchangeable object in Java that holds the fields. We check the card is sensible
 when we load it: the limits must be positive, the invariants must not be empty,
-the language must be Java or Rust, the tier must be L0, L1, or L2, and the task
-document must actually exist.
+the language must exist in the toolchain registry, the tier must be L0, L1, or L2,
+and the task document must actually exist.
 
 **The "I agree" step.** A worker calls an address to **accept** the task document.
 We store a signed record: who accepted, and the fingerprint of the exact task
@@ -189,7 +197,7 @@ heavily on AI are flagged for a human to review.
 
 In `examples/image-resize/` we build a complete practice setup:
 
-- `baseline/` — the working old version, in the existing language (Java or Rust).
+- `baseline/` — the working old version, in the existing language.
 - `properties/` — rules that must *always* hold. Examples: the output size matches
   what was asked; the see-through part stays see-through; color values stay in
   range; resizing to the same size changes nothing.
@@ -241,7 +249,8 @@ Both tiers follow the same rules:
 
 **Done when:** code that tries to connect to the outside fails to start; an
 infinite loop hits the fuel limit; an unpredictable module is rejected; three runs
-of a good module give identical results; both Java and Rust submissions work.
+of a good module give identical results; and submissions in the languages we have
+built (Java and Rust) work.
 
 ---
 
@@ -303,9 +312,9 @@ Source is stored by fingerprint (so identical code is stored once). Builds are
 fingerprinted. Verdicts are signed. The full journey is:
 **accept → submit → build → gate → score → verdict.**
 
-**Done when:** the whole journey works for both Java and Rust on the practice
-module; a broken module is rejected at the expected step; the leaderboard shows the
-correct Pareto order.
+**Done when:** the whole journey works for the practice module in the languages we
+have built so far (Java and Rust); a broken module is rejected at the expected step;
+the leaderboard shows the correct Pareto order.
 
 ---
 
@@ -328,7 +337,8 @@ and integration tests.
 ## 10. "We are done with P2 when"
 
 - One contract completes the full accept→submit→build→verdict journey.
-- **Both Java and Rust** submissions build and are evaluated.
+- **The languages we have built so far (Java and Rust)** submissions build and are
+  evaluated, and the registry makes adding a third a matter of plugging in a compiler.
 - The same source gives the same verdict across three runs.
 - There are no side doors: the internet, files, clock, randomness, and extra
   threads are impossible or blocked.
@@ -362,8 +372,10 @@ ledger) can begin.
    gating, and the M1 web addresses.
 3. Build the disclosure checker and the agreements (M1b).
 4. Add the first practice module and the old version in its existing language (M2).
-5. Build the compilers (JavaBuilder, RustBuilder) and the WASM sandbox (M3).
+5. Build the compilers (JavaBuilder, RustBuilder) behind the toolchain registry, and
+   the WASM sandbox (M3).
 
 **A decision still open from P0:** the first practice module and its language —
 default to **Java** (it matches the `oct/java/` folder), with the Rust path built
-in the same way.
+the same way. The `build` track (new apps, proposals, rates) is a later phase; see
+[`NEW-BUILDS.md`](NEW-BUILDS.md).

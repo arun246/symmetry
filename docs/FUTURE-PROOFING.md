@@ -72,8 +72,9 @@ These are the specific things that, if hardcoded, become painful later:
    lets workers **ask for more data or AI help** — that is a back-and-forth
    conversation, not a single fixed record. It needs a **lifecycle** (a sequence of
    states a job passes through).
-6. **"Only Java and Rust are allowed."** Adding C, Go, or TypeScript later should
-   be plugging in a new compiler, not editing the center.
+6. **"Only a fixed short list of languages is allowed."** The design now says *any*
+   language the task names. Adding C, Go, or TypeScript later must be plugging in a
+   new compiler, not editing the center.
 
 ---
 
