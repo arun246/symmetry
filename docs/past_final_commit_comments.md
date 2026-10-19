@@ -35,6 +35,61 @@ When a change is finished and accepted, add an entry **at the top** of
 
 ## Entries
 
+## 2026-10-19 — Add draw.io visual diagrams (boxes, solid/dotted lines) (uncommitted)
+
+**What changed.** Added `docs/diagrams/symmetry-uml.drawio`, an 11-page draw.io
+document built from native draw.io objects: actor shapes, use-case ellipses, UML
+class boxes (name/attributes/methods compartments), deployment and component
+boxes, an ER entity pair with a crow's-foot edge, and sequence diagrams with
+lifelines and message arrows. Connector convention: **solid = implemented**,
+**dashed/dotted = planned**. The markdown doc now points to it.
+
+**Why (decision).** The owner asked for the class and other diagrams to be
+"boxes and dotted and solid lines" using draw.io objects, rather than text-style
+Mermaid. A `.drawio` file was chosen because it opens and stays editable in
+draw.io / diagrams.net, and diff-friendly plain XML (`<mxfile>` with one
+`<diagram>` per page) keeps it in the repo next to the code. Rejected
+alternatives: exported PNG/SVG (not editable, goes stale) and a screenshot from
+the web app (no source). The Mermaid copy is kept because it renders on GitHub;
+the draw.io file is the editable visual source.
+
+**Files touched.**
+- `docs/diagrams/symmetry-uml.drawio:1` (new — 11 pages).
+- `docs/diagrams/uml_diagrams.md:15` (added pointer to the `.drawio`).
+
+**Code.** Documentation/diagram-only change; Before/After blocks skipped per the
+rule above.
+
+**References.** Entry below (UML/system-interaction doc); `docs/DESIGN.md`,
+`docs/IMPLEMENTATION.md`, `docs/STACK.md`.
+
+## 2026-10-19 — Add UML / system-interaction design doc (uncommitted)
+
+**What changed.** Added `docs/diagrams/uml_diagrams.md`: a class-first UML and
+system-interaction reference. It contains a use-case catalog, context/deployment
+and component diagrams, the domain class model, an ER diagram of the schema, a
+per-class interaction diagram for **every** class (platform, UI, AI, WASM SDK)
+showing its software interfaces, database access, and use case, plus use-case
+sequence diagrams (implemented and planned) and a traceability matrix.
+
+**Why (decision).** The owner asked for "senior system engineer"-level diagrams
+that walk one class at a time, cover interactions with software interfaces,
+database access, and stakeholder use cases. A single markdown file with Mermaid
+was chosen because it renders directly on GitHub and next to the code it
+describes (no external diagram tool to install or keep in sync). Rejected
+alternative: generating PNG/SVG images or a heavyweight UML tool — harder to
+review in pull requests and to keep current. Implemented (✅) and planned (🔜)
+elements are marked separately so the diagram is honest about M1–M1b status.
+
+**Files touched.**
+- `docs/diagrams/uml_diagrams.md:1` (new — full document).
+
+**Code.** Documentation-only change; Before/After blocks skipped per the rule
+above.
+
+**References.** `docs/DESIGN.md`, `docs/IMPLEMENTATION.md`, `docs/STACK.md`,
+`AGENTS.md`; entry below (Postgres/schema hardening).
+
 ## 2026-10-19 — Run Postgres in Docker; squash the schema into one hardened baseline (uncommitted)
 
 **What changed.** Started the dev Postgres from `deploy/docker-compose.yml` (tuned
