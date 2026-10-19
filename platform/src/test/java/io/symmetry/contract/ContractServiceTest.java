@@ -172,7 +172,7 @@ class ContractServiceTest {
     void acceptStoresVerifiedAcceptanceAndAdvancesLifecycle() throws Exception {
         Contract contract = sampleContract();
         when(contracts.findById(contract.getId())).thenReturn(Optional.of(contract));
-        when(acceptances.save(any(Acceptance.class)))
+        when(acceptances.saveAndFlush(any(Acceptance.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         KeyPair keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();

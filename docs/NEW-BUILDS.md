@@ -43,8 +43,7 @@ The earlier docs said "Java or Rust." That was wrong as a rule. The correct rule
 
 **What this means for the platform:** adding a language must be "plug in a new
 compiler," not "edit the center." We call that list-of-compilers a **toolchain
-registry**. Java and Rust are just the **first two** entries. See socket #6 in
-[`FUTURE-PROOFING.md`](FUTURE-PROOFING.md).
+registry**. Java and Rust are just the **first two** entries.
 
 ---
 

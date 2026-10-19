@@ -131,7 +131,14 @@ public class ContractService {
                 hash, request.signature(), request.publicKey(), true, writeJson(request.agreements()));
         contract.markAccepted();
         contracts.save(contract);
-        return acceptances.save(acceptance);
+        try {
+            // Flush now so the unique (contract_id, worker_id) constraint is checked
+            // inside this transaction and can be reported as 409, not a 500.
+            return acceptances.saveAndFlush(acceptance);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Worker " + request.workerId() + " already accepted contract " + contractId);
+        }
     }
 
     private ContractView toView(Contract contract) {

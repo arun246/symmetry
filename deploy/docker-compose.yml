@@ -2,6 +2,9 @@ name: symmetry
 
 # Local development infrastructure for Symmetry.
 # Start with:  docker compose -f deploy/docker-compose.yml up -d
+# If your user is not in the `docker` group yet, prefix with `sudo` (or run
+# `sg docker -c '...'` in the current shell), e.g.:
+#   sg docker -c 'docker compose -f deploy/docker-compose.yml up -d postgres'
 # Everything here is for local development only; use managed services in production.
 #
 # The AI service reaches a hosted/LiteLLM gateway through SYMMETRY_AI_BASE_URL, so
@@ -16,6 +19,30 @@ services:
       POSTGRES_DB: symmetry
       POSTGRES_USER: symmetry
       POSTGRES_PASSWORD: symmetry
+      # Data-page checksums detect silent storage corruption. Set only at initdb
+      # time, so it applies when the volume is first created.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    # Tuned for a small (~2 GB) development machine, NOT for production. Postgres
+    # defaults assume far more RAM; these keep the container light and predictable.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "effective_cache_size=512MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "max_connections=40"
+      - "-c"
+      - "log_min_duration_statement=500"
+    # Postgres uses /dev/shm for parallel workers; the 64 MB default is small.
+    shm_size: "128mb"
+    # Hard cap so a runaway query cannot take the whole host down.
+    mem_limit: "512m"
+    restart: unless-stopped
     ports:
       - "5432:5432"
     volumes:

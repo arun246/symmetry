@@ -1,7 +1,7 @@
 package io.symmetry.task;
 
 /**
- * The states a contract moves through (socket 7 in {@code docs/FUTURE-PROOFING.md}).
+ * The states a contract moves through.
  *
  * <p>V1 walks the shortest path ({@code DRAFT → ACCEPTED}); the full sequence is
  * recorded now so back-and-forth negotiation, revisions, and merges can be added

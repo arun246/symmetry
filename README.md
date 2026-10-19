@@ -104,5 +104,3 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
 - [docs/NEW-BUILDS.md](docs/NEW-BUILDS.md) — building brand-new apps: proposals,
   design, rates, milestones, and the quality bar.
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how to build the first parts.
-- [docs/FUTURE-PROOFING.md](docs/FUTURE-PROOFING.md) — what future needs might
-  arrive, and the "sockets" we build now so we do not have to rewrite later.

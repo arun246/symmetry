@@ -6,8 +6,7 @@ import java.util.Map;
 import java.util.OptionalDouble;
 
 /**
- * A flexible bundle of named measurements (socket 4 in
- * {@code docs/FUTURE-PROOFING.md}).
+ * A flexible bundle of named measurements.
  *
  * <p>Rather than fixed fields (p50/p99/memory/...), metrics are a map so new
  * domains can record jobs-per-second, page-feel, answer quality, energy, and so

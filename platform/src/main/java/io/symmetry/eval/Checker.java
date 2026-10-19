@@ -1,7 +1,7 @@
 package io.symmetry.eval;
 
 /**
- * A single checkpoint in the gate (socket 3 in {@code docs/FUTURE-PROOFING.md}).
+ * A single checkpoint in the gate.
  *
  * <p>The gate is a list of these, not a fixed sequence. V1 plugs in property,
  * fuzz, differential, holdout, and OOD checkers (M4); a simulator, visual

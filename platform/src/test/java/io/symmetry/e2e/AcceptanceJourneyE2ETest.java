@@ -11,17 +11,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -48,20 +47,34 @@ class AcceptanceJourneyE2ETest {
     private static final String TASK_DOCUMENT = "End-to-end task document";
 
     @Autowired
-    private TestRestTemplate rest;
-
-    @Autowired
     private ObjectMapper mapper;
 
+    @LocalServerPort
+    private int port;
+
+    private RestClient client;
+
+    @BeforeEach
+    void setUp() {
+        client = RestClient.builder()
+                .baseUrl("http://localhost:" + port)
+                // Never throw on 4xx/5xx; the test asserts the status code itself.
+                .defaultStatusHandler(code -> true, (request, response) -> {
+                })
+                .build();
+    }
+
     private ResponseEntity<String> postJson(String path, Object body) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        return rest.postForEntity(path, new HttpEntity<>(mapper.writeValueAsString(body), headers),
-                String.class);
+        return client.post()
+                .uri(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(mapper.writeValueAsString(body))
+                .retrieve()
+                .toEntity(String.class);
     }
 
     private JsonNode getJson(String path) {
-        ResponseEntity<String> response = rest.getForEntity(path, String.class);
+        ResponseEntity<String> response = client.get().uri(path).retrieve().toEntity(String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         return mapper.readTree(response.getBody());
     }

@@ -69,7 +69,7 @@ symmetry/
       eval/        # keycard + checker/gate types (sandboxes land in M3)
       scoring/     # flexible metric vector (Pareto ranking lands in M5)
       # planned: submission/ , trust/ , store/ , api/
-    src/main/resources/db/migration/   # Flyway V1, V2
+    src/main/resources/db/migration/   # Flyway migrations (V1 baseline)
     src/test/java/io/symmetry/         # our own tests
   ui/                          # React + AWS Cloudscape console (Vite)
   ai/                          # Python FastAPI AI service

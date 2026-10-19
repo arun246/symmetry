@@ -1,7 +1,7 @@
 package io.symmetry.task;
 
 /**
- * The kind of work a contract describes (socket 1 in {@code docs/FUTURE-PROOFING.md}).
+ * The kind of work a contract describes.
  *
  * <p>V1 only uses {@link #COMPUTE}: a pure, predictable function judged by tests
  * and ranked by speed/memory. The other values exist now so that adding a service,

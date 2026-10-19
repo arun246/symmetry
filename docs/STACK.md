@@ -183,9 +183,8 @@ Built so far (details and "done when" tests in `docs/IMPLEMENTATION.md`):
 1. `deploy/docker-compose.yml`: Postgres, MinIO, Redis, Keycloak (image versions
    pinned; healthchecks on the ones that support them).
 2. `platform/`: Maven **wrapper** + Spring Boot skeleton + Flyway
-   `V1__contract_acceptance.sql` (`contract`, `acceptance`) and
-   `V2__work_kind_lifecycle_verified_acceptance.sql` (work kind, lifecycle, and a
-   verified, agreement-backed acceptance).
+   `V1__baseline.sql` (a single, hardened baseline: `contract` + `acceptance`,
+   with named constraints, checks, indexes, and an `updated_at` trigger).
 3. Contract records + validation (the language must be in the **toolchain
    registry**); REST: `POST/GET /contracts`,
    `GET /contracts/{id}/{version}`, `GET /contracts/{id}/{version}/workbench`
@@ -196,9 +195,9 @@ Built so far (details and "done when" tests in `docs/IMPLEMENTATION.md`):
 6. `wasm-sdk/`: the ABI crate + one `image-resize` example.
 7. CI: `./mvnw verify` (Testcontainers Postgres) + `npm run build` + `cargo build`.
 
-The **seven sockets** from `docs/FUTURE-PROOFING.md` are installed as types (work
-kind, lifecycle, toolchain registry, keycard, checker list, flexible metrics);
-V1 fills only the compute cell. Next: deepen M1b → M2 → M3, then the `build` track.
+Core interfaces are cell-agnostic (work kind, lifecycle, toolchain registry,
+keycard, checker list, flexible metrics); V1 fills only the compute cell. Next:
+deepen M1b → M2 → M3, then the `build` track.
 
 ---
 

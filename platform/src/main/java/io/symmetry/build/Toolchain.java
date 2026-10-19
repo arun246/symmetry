@@ -1,7 +1,7 @@
 package io.symmetry.build;
 
 /**
- * A compiler connector (socket 6 in {@code docs/FUTURE-PROOFING.md}).
+ * A compiler connector.
  *
  * <p>Adding a language means implementing this interface and registering it as a
  * Spring bean; nothing in the center of the system changes. Implementations land
