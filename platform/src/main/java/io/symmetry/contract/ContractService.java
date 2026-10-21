@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import io.symmetry.build.ToolchainRegistry;
+import io.symmetry.identity.Actor;
 import io.symmetry.task.WorkKind;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -58,6 +59,10 @@ public class ContractService {
     }
 
     public ContractView create(ContractRequest request) {
+        return create(request, Actor.system());
+    }
+
+    public ContractView create(ContractRequest request, Actor actor) {
         if (!TASK_KINDS.contains(request.taskKind())) {
             throw badRequest("taskKind must be one of " + TASK_KINDS);
         }
@@ -80,7 +85,8 @@ public class ContractService {
 
         Contract contract = new Contract(UUID.randomUUID(), request.moduleId(), request.version(),
                 request.taskKind(), request.language().toLowerCase(), request.disclosureTier(),
-                workKind, request.taskDocument(), writeJson(request.payload()));
+                workKind, request.taskDocument(), writeJson(request.payload()),
+                actor == null ? null : actor.orgId(), actor == null ? null : actor.id());
         try {
             return toView(contracts.save(contract));
         } catch (DataIntegrityViolationException e) {
@@ -94,6 +100,10 @@ public class ContractService {
                 ? contracts.findAll(pageable)
                 : contracts.findByModuleId(moduleId, pageable);
         return PageResponse.from(page, this::toView);
+    }
+
+    public PageResponse<ContractView> listForOrg(UUID orgId, Pageable pageable) {
+        return PageResponse.from(contracts.findByOrgId(orgId, pageable), this::toView);
     }
 
     public ContractView get(String moduleId, String version) {
@@ -145,7 +155,8 @@ public class ContractService {
         return new ContractView(contract.getId(), contract.getModuleId(), contract.getVersion(),
                 contract.getTaskKind(), contract.getLanguage(), contract.getWorkKind().name().toLowerCase(),
                 contract.getLifecycleState().name().toLowerCase(), contract.getDisclosureTier(),
-                contract.getTaskDocument(), readJson(contract.getPayload()), contract.getCreatedAt());
+                contract.getTaskDocument(), readJson(contract.getPayload()),
+                contract.getOrgId(), contract.getCreatedBy(), contract.getCreatedAt());
     }
 
     private static WorkKind parseWorkKind(String value) {

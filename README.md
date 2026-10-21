@@ -30,6 +30,27 @@ That is the whole system — for the **first kind of work**, which we call
 
 ---
 
+## Screenshots — build 0.0.1
+
+Real captures from the running app at 1440×1100 in the light Harbor theme.
+
+### Worker main page
+
+![Worker overview](docs/screenshots/0.0.1/worker-overview.png)
+
+### Publisher organization main page
+
+![Publisher overview](docs/screenshots/0.0.1/publisher-overview.png)
+
+### Admin main page
+
+![Admin overview](docs/screenshots/0.0.1/admin-overview.png)
+
+A PostgreSQL development snapshot and restore steps are in
+[`data/pgsql/0.0.1/`](data/pgsql/0.0.1/).
+
+---
+
 ## The second kind of work: building something brand new
 
 Sometimes there is *no* existing part. The company has a **completely new idea**
@@ -90,7 +111,7 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
 - **How we judge:** correctness first, then speed and memory (for `optimize`); a
   quality rubric and milestone reviews (for `build`).
 - **Built with:** a **Java Spring Boot API**, **Rust→WASM** modules, a **Python AI**
-  service, **PostgreSQL**, and a **React + AWS Cloudscape** UI. See
+  service, **PostgreSQL**, and a **React** UI with a custom macOS-style design. See
   [docs/STACK.md](docs/STACK.md).
 - **The hard problem:** verify without leaking.
 

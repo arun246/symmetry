@@ -5,7 +5,7 @@ Minimum Viable Product (MVP) — the smallest first version. It is plain-languag
 every tool is explained the first time.
 
 If you only remember one line: **Java Spring Boot API + Rust→WASM modules +
-Python AI service + PostgreSQL + React using Amazon's Cloudscape UI.**
+Python AI service + PostgreSQL + React with a custom macOS-style UI.**
 
 ---
 
@@ -14,7 +14,7 @@ Python AI service + PostgreSQL + React using Amazon's Cloudscape UI.**
 | # | Piece | Built with | What it does |
 |---|---|---|---|
 | 1 | **API (control plane)** | **Java 21 + Spring Boot 4** (REST) | The system of record and coordinator: contracts, task documents, acceptance, submissions, builds, evaluation, scoring, trust, escrow. |
-| 2 | **UI console** | **React + AWS Cloudscape** | The website. Looks and behaves like the AWS console. |
+| 2 | **UI console** | **React + custom Harbor design system** | The website. macOS-Settings-inspired, solid surfaces, light/dark. |
 | 3 | **AI service** | **Python** (FastAPI) | Two assistants: help organizations *write tasks*, and help workers *write submissions*. |
 | 4 | **Worker module SDK** | **Rust → WebAssembly (WASM)** | The shape a submitted module must take, plus example modules and a local test kit. |
 | 5 | **System of record** | **PostgreSQL 16+** | The database. Holds all records. |
@@ -35,8 +35,8 @@ heavy computing itself.
 - **Python + FastAPI** for AI: the AI ecosystem (model gateways, MCP, redaction
   tools) is most mature in Python.
 - **PostgreSQL** (see section 5) is the best fit, not MySQL.
-- **React + AWS Cloudscape** gives the AWS-console look for free: Cloudscape is
-  Amazon's own open-source design system.
+- **React + a custom design system** so the console matches the Harbor/macOS
+  look exactly; **Radix UI** supplies the accessible primitives.
 
 ---
 
@@ -46,7 +46,7 @@ heavy computing itself.
 symmetry/
   docs/                    # these design documents
   platform/                # Java 21 + Spring Boot REST API + evaluator
-  ui/                      # React + AWS Cloudscape console
+  ui/                      # React + custom Harbor design system
   ai/                      # Python FastAPI AI service
   wasm-sdk/                # Rust module SDK + example modules
   contracts/               # published contract files (.json)
@@ -82,14 +82,19 @@ symmetry/
 
 ### 4.2 UI console — `ui/`
 
+Design decision: the console is a **custom macOS-Settings-inspired design system**
+(Harbor palette, light/dark, solid surfaces). Cloudscape was dropped because its
+AWS visual language cannot be themed into this design; see `docs/UI-PLAN.md`.
+
 | Concern | Library | Why (plain) |
 |---|---|---|
-| Components | **`@cloudscape-design/components`** + **`global-styles`** | Amazon's design system: tables, wizards, app layout. |
-| AI chat panel | **`@cloudscape-design/chat-components`** | Ready-made assistant chat UI. |
-| Charts | **`@cloudscape-design/chart-components`** | Leaderboards and metrics graphs. |
-| Code view | **`@cloudscape-design/code-view`** (Monaco) | Show and edit submission code. |
+| Design system | **Custom** CSS tokens + components (`ui/src/ui/`) | Exact Harbor look; no fighting a vendor theme. |
+| Accessible primitives | **Radix UI** (dialog, popover, select, tabs, switch, toast, tooltip) | Headless behaviour and keyboard/focus handling we would otherwise get wrong. |
+| Charts | **Recharts** (custom tokens) | Donut/bar/line with the quiet macOS look; paired with a table fallback. |
+| Code view | **CodeMirror 6** | Show submission code without Cloudscape/Monaco. |
+| AI chat panel | **Custom** panel over the `ai/` API | Matches the shell; no vendor chat chrome. |
 | Data fetching | **TanStack Query** | Talks to the Java REST API and caches results. |
-| Auth | **oidc-client-ts** + **Keycloak** | Same login as the API. |
+| Auth | **`oidc-client-ts`** + **Keycloak** | Authorization Code + PKCE; admin is a realm role. |
 | Logs | **xterm.js** | A terminal-style view of build logs. |
 
 ### 4.3 AI service — `ai/`
@@ -190,7 +195,7 @@ Built so far (details and "done when" tests in `docs/IMPLEMENTATION.md`):
    `GET /contracts/{id}/{version}`, `GET /contracts/{id}/{version}/workbench`
    (tier-filtered), and `POST /contracts/{id}/accept` (Ed25519-verified and
    agreement-gated).
-4. `ui/`: React + Cloudscape `AppLayout` + a Contracts table calling the API.
+4. `ui/`: React + custom shell (Harbor tokens) + a Contracts table calling the API.
 5. `ai/`: FastAPI stub with `/health` and one gateway passthrough (audit-logged).
 6. `wasm-sdk/`: the ABI crate + one `image-resize` example.
 7. CI: `./mvnw verify` (Testcontainers Postgres) + `npm run build` + `cargo build`.

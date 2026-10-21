@@ -57,6 +57,12 @@ public class Contract {
     @Column(nullable = false, columnDefinition = "jsonb")
     private String payload;
 
+    @Column(name = "org_id")
+    private UUID orgId;
+
+    @Column(name = "created_by")
+    private UUID createdBy;
+
     @Column(name = "created_at", nullable = false, columnDefinition = "timestamptz")
     private Instant createdAt = Instant.now();
 
@@ -65,6 +71,13 @@ public class Contract {
 
     public Contract(UUID id, String moduleId, String version, String taskKind, String language,
             String disclosureTier, WorkKind workKind, String taskDocument, String payload) {
+        this(id, moduleId, version, taskKind, language, disclosureTier, workKind,
+                taskDocument, payload, null, null);
+    }
+
+    public Contract(UUID id, String moduleId, String version, String taskKind, String language,
+            String disclosureTier, WorkKind workKind, String taskDocument, String payload,
+            UUID orgId, UUID createdBy) {
         this.id = id;
         this.moduleId = moduleId;
         this.version = version;
@@ -74,6 +87,8 @@ public class Contract {
         this.workKind = workKind;
         this.taskDocument = taskDocument;
         this.payload = payload;
+        this.orgId = orgId;
+        this.createdBy = createdBy;
     }
 
     public UUID getId() {
@@ -116,8 +131,22 @@ public class Contract {
         return payload;
     }
 
+    public UUID getOrgId() {
+        return orgId;
+    }
+
+    public UUID getCreatedBy() {
+        return createdBy;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    /** Attach the owning organization and author after a contract is created. */
+    public void assignOwner(UUID orgId, UUID createdBy) {
+        this.orgId = orgId;
+        this.createdBy = createdBy;
     }
 
     /** Advance the lifecycle once a worker has accepted the task document. */

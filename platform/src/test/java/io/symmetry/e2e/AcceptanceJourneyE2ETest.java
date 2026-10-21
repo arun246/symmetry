@@ -65,8 +65,13 @@ class AcceptanceJourneyE2ETest {
     }
 
     private ResponseEntity<String> postJson(String path, Object body) {
+        return postJson("publisher@symmetry.local", path, body);
+    }
+
+    private ResponseEntity<String> postJson(String user, String path, Object body) {
         return client.post()
                 .uri(path)
+                .header("X-Symmetry-User", user)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(mapper.writeValueAsString(body))
                 .retrieve()
@@ -127,8 +132,8 @@ class AcceptanceJourneyE2ETest {
         badAccept.put("publicKey", Base64.getEncoder().encodeToString(
                 KeyPairGenerator.getInstance("Ed25519").generateKeyPair().getPublic().getEncoded()));
         badAccept.put("signature", Base64.getEncoder().encodeToString(new byte[64]));
-        assertThat(postJson("/contracts/" + id + "/accept", badAccept).getStatusCode())
-                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(postJson("worker@symmetry.local", "/contracts/" + id + "/accept", badAccept)
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
         // 5. The worker signs and accepts.
         KeyPair keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -145,7 +150,8 @@ class AcceptanceJourneyE2ETest {
         accept.put("publicKey", Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded()));
         accept.put("signature", Base64.getEncoder().encodeToString(signer.sign()));
 
-        ResponseEntity<String> accepted = postJson("/contracts/" + id + "/accept", accept);
+        ResponseEntity<String> accepted =
+                postJson("worker@symmetry.local", "/contracts/" + id + "/accept", accept);
         assertThat(accepted.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         JsonNode acceptance = mapper.readTree(accepted.getBody());
         assertThat(acceptance.get("verified").asBoolean()).isTrue();
@@ -171,7 +177,7 @@ class AcceptanceJourneyE2ETest {
                 KeyPairGenerator.getInstance("Ed25519").generateKeyPair().getPublic().getEncoded()));
         accept.put("signature", Base64.getEncoder().encodeToString(new byte[64]));
 
-        assertThat(postJson("/contracts/" + id + "/accept", accept).getStatusCode())
-                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(postJson("worker@symmetry.local", "/contracts/" + id + "/accept", accept)
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }

@@ -199,6 +199,7 @@ class ContractApiIntegrationTest {
         accept.put("signature", Base64.getEncoder().encodeToString(signer.sign()));
 
         mockMvc.perform(post("/contracts/{id}/accept", id)
+                        .header("X-Symmetry-User", "worker@symmetry.local")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(accept)))
                 .andExpect(status().isCreated())

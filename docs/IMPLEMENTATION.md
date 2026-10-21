@@ -5,7 +5,7 @@ This document explains the **first two stages** of the plan in
 special word is explained the first time it appears.
 
 The full technology choices (and why) live in [`docs/STACK.md`](STACK.md): a
-**Java Spring Boot API**, a **React + AWS Cloudscape UI**, a **Python AI
+**Java Spring Boot API**, a **React UI**, a **Python AI
 service**, **Rust→WASM modules**, **PostgreSQL**, and **MinIO + Redis**.
 
 We are building the part that proves the idea works: that a piece of code sent in
@@ -26,7 +26,7 @@ designed to accept any language the task committee names).
 | The main website ("control plane") | **Java 21 + Spring Boot 4** | Spring Boot is a popular kit for building web servers in Java; it already matches the `oct/java/` folder. |
 | Build tool for our own code | **Maven** (with a "wrapper") | Maven assembles our project and its libraries. A "wrapper" ships the tool *with* the project so the build does not depend on what is installed on the computer. |
 | Database | **PostgreSQL 16+**, with **Testcontainers** for tests | A database is where we store records. We use Postgres for real in every environment (never H2 — it behaves differently and gives false confidence). |
-| UI console | **React + AWS Cloudscape** | Amazon's own open-source design system gives the AWS-console look. |
+| UI console | **React + custom Harbor design system** | macOS-Settings-inspired, solid surfaces, light/dark; Radix for accessible primitives. |
 | AI service | **Python + FastAPI** | Help for writing tasks and submissions, behind a model gateway. |
 | Artifacts / queue | **MinIO (S3) + Redis** | Store submitted files; run and rate-limit evaluation jobs. |
 | Worker languages | **Any language the task names** | For `optimize`, the committee sets it from the existing software. Java and Rust are simply the first two the platform can build; more are added through a **toolchain registry**. |
@@ -71,7 +71,7 @@ symmetry/
       # planned: submission/ , trust/ , store/ , api/
     src/main/resources/db/migration/   # Flyway migrations (V1 baseline)
     src/test/java/io/symmetry/         # our own tests
-  ui/                          # React + AWS Cloudscape console (Vite)
+  ui/                          # React + custom Harbor design system (Vite)
   ai/                          # Python FastAPI AI service
   wasm-sdk/                    # Rust module SDK; modules/image-resize is the ABI example
   .github/workflows/           # CI: Maven, npm, pip, cargo

@@ -1,104 +1,196 @@
-import { useQuery } from "@tanstack/react-query";
-import AppLayout from "@cloudscape-design/components/app-layout";
-import ContentLayout from "@cloudscape-design/components/content-layout";
-import Header from "@cloudscape-design/components/header";
-import SideNavigation from "@cloudscape-design/components/side-navigation";
-import Table from "@cloudscape-design/components/table";
-import TopNavigation from "@cloudscape-design/components/top-navigation";
-import Box from "@cloudscape-design/components/box";
-import Button from "@cloudscape-design/components/button";
-import SpaceBetween from "@cloudscape-design/components/space-between";
-import Badge from "@cloudscape-design/components/badge";
-import { listContracts, type Contract } from "./api";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { roleHome, useMe } from "./auth";
+import { Loading } from "./components/ui";
+import { Shell, RequireRole } from "./components/Shell";
+import { Login } from "./pages/Login";
+import { OverviewPage } from "./pages/Overview";
+import { ContractDetailPage, ContractsPage, WorkbenchPage } from "./pages/Contracts";
+import { AcceptancesPage, EarningsPage, SubmissionsPage } from "./pages/Worker";
+import { AnalyticsPage, EvaluationsPage, PaymentsPage, WorkersPage } from "./pages/Publisher";
+import { SettingsPage } from "./pages/Settings";
+import {
+  AdminAnalyticsPage,
+  AdminOverviewPage,
+  AuditPage,
+  ConfigurationPage,
+  OrganizationsPage,
+  RequestsPage,
+  TroubleshootingPage,
+  UsersPage,
+} from "./pages/Admin";
 
-const navigationItems = [
-  { type: "link" as const, text: "Contracts", href: "#/contracts" },
-  { type: "link" as const, text: "Submissions", href: "#/submissions" },
-  { type: "link" as const, text: "Leaderboard", href: "#/leaderboard" },
-  { type: "link" as const, text: "New builds", href: "#/builds" },
-];
+function Landing() {
+  const me = useMe();
+  if (me.isLoading) {
+    return (
+      <div className="window">
+        <div className="login-shell">
+          <Loading label="Starting Symmetry" />
+        </div>
+      </div>
+    );
+  }
+  if (me.data) {
+    return <Navigate to={roleHome[me.data.role]} replace />;
+  }
+  return <Navigate to="/user/login" replace />;
+}
+
+function NotFound() {
+  return (
+    <div className="empty">
+      <strong>Page not found</strong>
+      Use the sidebar to return to a page that exists.
+    </div>
+  );
+}
 
 export default function App() {
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["contracts"],
-    queryFn: () => listContracts(),
-  });
-
   return (
-    <>
-      <TopNavigation
-        identity={{ href: "#", title: "Symmetry Console" }}
-        utilities={[
-          { type: "button", text: "Docs", href: "#/docs" },
-          { type: "button", text: "Sign in" },
-        ]}
-      />
-      <AppLayout
-        navigation={
-          <SideNavigation
-            header={{ href: "#/", text: "Symmetry" }}
-            items={navigationItems}
-          />
-        }
-        contentType="table"
-        toolsHide
-        content={
-          <ContentLayout
-            header={
-              <Header
-                variant="h1"
-                description="Published job cards. Each contract is a machine-readable task for workers."
-                actions={
-                  <SpaceBetween direction="horizontal" size="xs">
-                    <Button onClick={() => refetch()}>Refresh</Button>
-                    <Button variant="primary">Publish contract</Button>
-                  </SpaceBetween>
-                }
-              >
-                Contracts
-              </Header>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/user/login" element={<Login />} />
+        <Route path="/user/admin/login" element={<Login admin />} />
+        <Route path="/user" element={<Shell />}>
+          <Route index element={<Navigate to="overview" replace />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="contracts" element={<ContractsPage />} />
+          <Route path="contracts/:moduleId/:version" element={<ContractDetailPage />} />
+          <Route
+            path="contracts/:moduleId/:version/workbench"
+            element={
+              <RequireRole allow={["WORKER"]}>
+                <WorkbenchPage />
+              </RequireRole>
             }
-          >
-            <Table<Contract>
-              loading={isLoading}
-              loadingText="Loading contracts"
-              items={data?.content ?? []}
-              trackBy="id"
-              empty={
-                <Box textAlign="center" color="inherit">
-                  <b>No contracts yet</b>
-                  <Box variant="p" color="inherit">
-                    {isError
-                      ? "Could not reach the API. Is the platform running?"
-                      : "Publish a contract to get started."}
-                  </Box>
-                </Box>
-              }
-              columnDefinitions={[
-                { id: "moduleId", header: "Module", cell: (c) => c.moduleId },
-                { id: "version", header: "Version", cell: (c) => c.version },
-                {
-                  id: "taskKind",
-                  header: "Task kind",
-                  cell: (c) => <Badge>{c.taskKind}</Badge>,
-                },
-                { id: "workKind", header: "Work kind", cell: (c) => c.workKind },
-                { id: "language", header: "Language", cell: (c) => c.language },
-                {
-                  id: "lifecycleState",
-                  header: "State",
-                  cell: (c) => c.lifecycleState,
-                },
-                {
-                  id: "disclosureTier",
-                  header: "Tier",
-                  cell: (c) => c.disclosureTier,
-                },
-              ]}
-            />
-          </ContentLayout>
-        }
-      />
-    </>
+          />
+          <Route
+            path="acceptances"
+            element={
+              <RequireRole allow={["WORKER"]}>
+                <AcceptancesPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="submissions"
+            element={
+              <RequireRole allow={["WORKER"]}>
+                <SubmissionsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="earnings"
+            element={
+              <RequireRole allow={["WORKER"]}>
+                <EarningsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="workers"
+            element={
+              <RequireRole allow={["PUBLISHER"]}>
+                <WorkersPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="evaluations"
+            element={
+              <RequireRole allow={["PUBLISHER"]}>
+                <EvaluationsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="analytics"
+            element={
+              <RequireRole allow={["PUBLISHER"]}>
+                <AnalyticsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="payments"
+            element={
+              <RequireRole allow={["PUBLISHER"]}>
+                <PaymentsPage />
+              </RequireRole>
+            }
+          />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="admin" element={<Navigate to="/user/admin/overview" replace />} />
+          <Route
+            path="admin/overview"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <AdminOverviewPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin/analytics"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <AdminAnalyticsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin/orgs"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <OrganizationsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin/users"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <UsersPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin/troubleshooting"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <TroubleshootingPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin/config"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <ConfigurationPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin/requests"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <RequestsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin/audit"
+            element={
+              <RequireRole allow={["ADMIN"]}>
+                <AuditPage />
+              </RequireRole>
+            }
+          />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

@@ -19,7 +19,7 @@ Decisions are repeated across these docs. When you change one, reconcile the oth
 - Absent: **Maven, Gradle, Rust/cargo**, and **no GPU**. Any Java build needs a committed wrapper (`./mvnw`) or Docker; do not assume `mvn` or `cargo` exist. Spring projects can be generated via `https://start.spring.io` (reachable).
 
 ## Load-bearing decisions (easy to get wrong)
-- **Stack (see `docs/STACK.md`):** Java 21 + Spring Boot REST API (`platform/`), React + **AWS Cloudscape** UI (`ui/`), Python FastAPI AI service (`ai/`), Rust→WASM modules (`wasm-sdk/`), **PostgreSQL** (not MySQL), MinIO + Redis.
+- **Stack (see `docs/STACK.md`):** Java 21 + Spring Boot REST API (`platform/`), React + **custom Harbor design system** UI (`ui/`), Python FastAPI AI service (`ai/`), Rust→WASM modules (`wasm-sdk/`), **PostgreSQL** (not MySQL), MinIO + Redis.
 - Never use **H2**; tests use **Testcontainers Postgres**.
 - Language is **not fixed to Java/Rust**. For `optimize`, the task committee sets it from the existing software (any language); for `build`, the worker proposes it. Java and Rust are just the first two **toolchain-registry** entries.
 - Two `task_kind`s: **`optimize`** (improve an existing module) and **`build`** (brand-new app: design proposal + hourly/fixed rate + milestones). See `docs/NEW-BUILDS.md`; V1 ships only `optimize`.

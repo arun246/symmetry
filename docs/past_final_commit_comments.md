@@ -35,6 +35,349 @@ When a change is finished and accepted, add an entry **at the top** of
 
 ## Entries
 
+## 2026-10-21 — 0.0.1 release artifacts: database backup and screenshots (uncommitted)
+
+**What changed.** Added a compressed PostgreSQL development snapshot under
+`data/pgsql/0.0.1/`, with checksum and restore instructions. Captured real
+screenshots of the three main pages (worker overview, publisher organization
+overview, admin platform overview) into `docs/screenshots/0.0.1/` and embedded
+them in the root `README.md`. The images were taken through the actual role
+picker with Playwright/Chromium, not mocked.
+
+**Why (decision).** The owner asked for a restorable database snapshot and visual
+proof of the running build. A plain `pg_dump --clean --if-exists` is the simplest
+restore path and keeps the file readable with only `gzip` + `psql`; a custom-format
+dump would add `pg_restore` as a second tool. The snapshot is explicitly marked
+**development only** because it contains seeded demo identities and demo data, not
+production secrets. Screenshots are served from `docs/` so GitHub renders them in
+the README without external hosting. Trade-off: binary artifacts grow the repo;
+the alternative (external object storage) would make the 0.0.1 state less
+self-contained.
+
+**Files touched.**
+- `data/pgsql/0.0.1/symmetry-0.0.1-20261021.sql.gz` (new snapshot).
+- `data/pgsql/0.0.1/README.md:1` (checksum, contents, restore commands).
+- `docs/screenshots/0.0.1/worker-overview.png` (new).
+- `docs/screenshots/0.0.1/publisher-overview.png` (new).
+- `docs/screenshots/0.0.1/admin-overview.png` (new).
+- `README.md:31` (Screenshots section + backup link).
+- `docs/past_final_commit_comments.md` (this entry).
+
+**Verification.** `gzip -t` passed; SHA-256
+`9b2a3eeaeab57bde83296d1754c6c89402114ea1d63eeb7e19289cb4b8daac3f`.
+The screenshot script waited for each role-specific heading and for loading
+spinners to clear; it reported zero console/page errors. Backend
+`./mvnw -B verify` (36 tests) and `ui/npm run build` had already passed.
+
+---
+
+## 2026-10-21 — Harbor UI: all worker, publisher and admin pages (uncommitted)
+
+**What changed.** The React console is now the Harbor UI described in
+`docs/UI-PLAN.md`. AWS Cloudscape is gone. A typed API client, dev auth, theme
+switcher, role-specific shell and pages for worker (`Overview`, `Contracts`,
+`Acceptances`, `Submissions`, `Earnings`, `Settings`), publisher (`Contracts`,
+`Workers`, `Evaluations`, `Analytics`, `Payments`, `Settings`) and admin
+(`Overview`, `Analytics`, `Organizations`, `Users`, `Troubleshooting`,
+`Configuration`, `Requests`, `Audit`) are implemented. Charts are small inline
+SVGs paired with data tables; dialogs/toggles/tabs use Radix primitives.
+
+**Why (decision).** Cloudscape looks like AWS and cannot be themed into the
+macOS-Settings/Harbor mock without heavy overrides, so we own a small token-based
+design system instead. Pages are thin: every number comes from the API and every
+mutation invalidates its query, so role scoping and audit stay server-side. The
+workbench signs the exact canonical message
+(`accept:<module>@<version>:sha256(taskDocument)`) with a fresh Ed25519 key in
+the browser and sends only the public key + signature. Trade-offs: charts are
+hand-built rather than a chart library (less code, full token control); sign-in
+still uses `X-Symmetry-User` in dev until Keycloak/PKCE is wired; payments and
+submissions explicitly say they are offline instead of faking data. Rejected:
+keeping Cloudscape, a chart dependency for four simple charts, and client-side
+role checks as the source of truth.
+
+**Files touched.**
+- `ui/package.json` (removed `@cloudscape-design/*`, added `react-router-dom` + Radix dialog/switch/tabs), `ui/src/main.tsx:1` (Harbor CSS + `initTheme` + QueryClient).
+- `ui/src/App.tsx:1` (route tree + role guards), `ui/src/api.ts:1` (typed client, `X-Symmetry-User`, `ApiError`), `ui/src/auth.ts:1`, `ui/src/theme.ts:1`, `ui/src/format.ts:1`.
+- `ui/src/styles.css:1` (tokens, components, dark mode, responsive, Radix dialog), `ui/src/components/`: `Shell.tsx:76`, `ui.tsx:1`, `charts.tsx:1`, `icons.tsx:1`.
+- `ui/src/pages/`: `Login.tsx:1`, `Overview.tsx:1`, `Contracts.tsx:31,290,404`, `Worker.tsx:1`, `Publisher.tsx:1`, `Settings.tsx:19`, `Admin.tsx:28`.
+- `ui/README.md:1`, `docs/UI-PLAN.md:3` (status now implemented).
+
+**Code — modified (representative Before/After).**
+
+`ui/src/App.tsx` replaced the Cloudscape shell with a router tree:
+
+```tsx
+// Before: <TopNavigation/> + <SideNavigation/> + <ContractsTable/>
+// After (excerpt):
+<Route path="/user" element={<Shell />}>
+  <Route path="overview" element={<OverviewPage />} />
+  <Route path="contracts/:moduleId/:version/workbench"
+    element={<RequireRole allow={["WORKER"]}><WorkbenchPage /></RequireRole>} />
+  <Route path="admin/overview"
+    element={<RequireRole allow={["ADMIN"]}><AdminOverviewPage /></RequireRole>} />
+</Route>
+```
+
+`ui/src/main.tsx` loads Harbor instead of Cloudscape:
+
+```tsx
+// Before
+import "@cloudscape-design/global-styles/index.css";
+// After
+import { initTheme } from "./theme";
+import "./styles.css";
+initTheme();
+```
+
+**New code — signing the acceptance (key part).**
+
+`ui/src/pages/Contracts.tsx:385`
+
+```tsx
+const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(taskDocument));
+const message = `accept:${moduleId}@${version}:${hex(digest)}`;
+const keyPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+const signature = await crypto.subtle.sign({ name: "Ed25519" }, keyPair.privateKey,
+    new TextEncoder().encode(message));
+// POST publicKey (SPKI/base64) + signature (raw/base64) + the six agreements
+```
+
+**Verification.** `cd ui && npm run build` → TypeScript + Vite build passed
+(161 modules). Live API smoke tests with `worker|publisher|admin@symmetry.local`
+confirmed the shape of `/me`, `/org/*`, `/worker/*`, `/admin/*`, publishing and
+the tier-filtered workbench.
+
+---
+
+## 2026-10-21 — Config keys are restricted by scope (uncommitted)
+
+**What changed.** `ConfigKeys` now declares which keys may be set at `ORG` /
+`CONTRACT` and which at `USER`; `SettingService` and `ConfigRequestService`
+reject anything outside those sets. `GLOBAL` still accepts every known key and
+is admin-only.
+
+**Why (decision).** Settings are writable by their owner: `/me/settings` writes
+`USER` scope. Without a scope check a worker could set
+`evaluation.timeLimitSeconds` (or a publisher could raise `evaluation.fuelLimit`)
+and bypass the correctness sandbox — a silent privilege escalation. The
+allow-list keeps the existing typed keys but makes the dangerous ones
+admin-only; org/contract requests are limited to evaluation, retention and
+contract defaults. Trade-off: a new key must be classified in one place. Rejected:
+trusting the endpoint that calls `SettingService`, and letting orgs request
+evaluation keys that would apply to everyone.
+
+**Files touched.**
+- `platform/src/main/java/io/symmetry/settings/ConfigKeys.java:26,71`
+- `platform/src/main/java/io/symmetry/settings/SettingService.java:56`
+- `platform/src/main/java/io/symmetry/settings/ConfigRequestService.java:48`
+
+**Code — modified (Before/After).**
+
+```java
+// Before: any known key could be written at any scope
+ConfigKeys.validate(key, value);
+
+// After
+ConfigKeys.validate(key, value);
+if (!ConfigKeys.allows(scope, key)) {
+    throw new IllegalArgumentException("'" + key + "' cannot be set at " + scope + " scope");
+}
+```
+
+**New code — the allow-list.** `ConfigKeys.java:26`
+
+```java
+private static final Set<String> ORG_KEYS = Set.of(
+        WORKER_ACCEPTANCE_REQUIRED, EVALUATION_TIME_LIMIT_SECONDS,
+        EVALUATION_FUEL_LIMIT, SCORING_PARETO_WEIGHTS,
+        RETENTION_SUBMISSION_DAYS, CONTRACT_AUTO_PUBLISH);
+
+private static final Set<String> USER_KEYS = Set.of(
+        NOTIFICATIONS_EMAIL, AI_ASSIST_ENABLED, WORKER_MAX_CONCURRENT);
+
+public static boolean allows(ConfigScope scope, String key) {
+    return switch (scope) {
+        case GLOBAL -> isKnown(key);
+        case ORG, CONTRACT -> ORG_KEYS.contains(key);
+        case USER -> USER_KEYS.contains(key);
+    };
+}
+```
+
+**Verification.** Live smoke test: `PATCH /me/settings` with
+`{"evaluation.timeLimitSeconds":9999}` returns 400; the same request for
+`notifications.email` succeeds. The existing 36-test suite is re-run after this
+change.
+
+---
+
+## 2026-10-21 — Online backend: identity, scoped config, audit, analytics, admin APIs (uncommitted)
+
+**What changed.** The platform is now an online, role-aware API. V2 adds
+`organization`, `app_user`, `setting`, `config_request`, `audit_log`, and
+`contract.org_id/created_by`. New surfaces: `/me`, `/worker/*`, `/org/*`,
+`/admin/*` (summary, analytics, organizations, users, troubleshooting, config,
+config requests, audit, SSE). Publishing is publisher/admin-only, acceptance is
+worker-only, and both are audited. Settings resolve `USER > CONTRACT > ORG >
+GLOBAL`; organizations request tweaks and an admin approves them, which writes
+the setting and two audit entries. Analytics are pre-aggregated in SQL.
+`ai/` and `wasm-sdk/` stay **offline** and are reported as such by
+`/admin/troubleshooting/*`.
+
+**Why (decision).** The owner asked to finish the web backend, keep AI/WASM
+offline for now, and make everything else online. Roles must be real, because
+worker and publisher are different actors and admin is observability + audited
+overrides. Dev sign-in is a header-driven filter (`X-Symmetry-User`) that only
+exists while `symmetry.security.enabled=false`; in deployed mode Keycloak issues
+the JWT and a converter maps `realm_access.roles` to `ROLE_*` so `hasRole`
+works. Config is data, not code: an allow-list of typed keys prevents inert
+typos, and **approval is explicit** so an org cannot silently change evaluation
+rules. Trade-offs: SSE is in-process (one JVM) and is swapped for Redis pub/sub
+later; submissions/payments/error-buffer are honest placeholders because the
+evaluator is offline; analytics use SQL over the existing tables rather than a
+warehouse. Rejected alternatives: trusting a client-supplied role, letting orgs
+write settings directly, and putting Prometheus behind the browser.
+
+**Files touched.**
+- `platform/src/main/resources/db/migration/V2__identity_config_audit.sql:12` (new schema + trigger + indexes).
+- `platform/src/main/java/io/symmetry/identity/`: `Role.java:1`, `Organization.java:1`, `AppUser.java:1`, `Actor.java:1`, `OrganizationRepository.java:1`, `AppUserRepository.java:1`, `CurrentUserService.java:28`, `DevAuthenticationFilter.java:26`, `DevDataSeeder.java:20`.
+- `platform/src/main/java/io/symmetry/settings/`: `ConfigScope.java:1`, `ConfigRequestStatus.java:1`, `Setting.java:1`, `SettingRepository.java:1`, `ConfigRequest.java:1`, `ConfigRequestRepository.java:1`, `ConfigKeys.java:14`, `SettingService.java:34`, `ConfigRequestView.java:1`, `ConfigRequestService.java:72`.
+- `platform/src/main/java/io/symmetry/audit/`: `AuditLog.java:1`, `AuditLogRepository.java:1`, `AuditService.java:20`.
+- `platform/src/main/java/io/symmetry/analytics/`: `MetricPoint.java:1`, `AnalyticsService.java:17`.
+- `platform/src/main/java/io/symmetry/events/EventService.java:21`.
+- `platform/src/main/java/io/symmetry/api/`: `MeView.java:1`, `WorkerAcceptanceView.java:1`, `OrganizationView.java:1`, `UserView.java:1`, `MeController.java:21`, `ApiExceptionHandler.java:1`.
+- `platform/src/main/java/io/symmetry/worker/WorkerController.java:24`.
+- `platform/src/main/java/io/symmetry/org/OrgController.java:45`.
+- `platform/src/main/java/io/symmetry/admin/AdminController.java:52`.
+- `platform/src/main/java/io/symmetry/config/SecurityConfig.java:23,63,76`, `MethodSecurityConfig.java:1`.
+- `platform/src/main/java/io/symmetry/contract/Contract.java:60`, `ContractView.java:9`, `ContractRepository.java:15`, `ContractService.java:61,65,100,155`, `ContractController.java:26,49,86`.
+- `platform/src/test/java/io/symmetry/api/IdentityAdminApiIntegrationTest.java:32` (new, 6 tests).
+- `platform/src/test/java/io/symmetry/contract/DisclosureServiceTest.java:37`, `ContractApiIntegrationTest.java:201`, `e2e/AcceptanceJourneyE2ETest.java:98`.
+- `docs/UI-PLAN.md:255` (API list reconciled with what exists).
+
+**Code — modified (representative Before/After).**
+
+`ContractService.create` gained an actor so contracts carry an owner:
+
+```java
+// Before: public ContractView create(ContractRequest request) { ... }
+// After:
+public ContractView create(ContractRequest request) { return create(request, Actor.system()); }
+public ContractView create(ContractRequest request, Actor actor) { ... }
+```
+
+`ContractController` now authorizes and audits:
+
+```java
+// Before
+@PostMapping @ResponseStatus(HttpStatus.CREATED)
+public ContractView create(@Valid @RequestBody ContractRequest request) { return service.create(request); }
+
+// After
+@PostMapping @ResponseStatus(HttpStatus.CREATED)
+@PreAuthorize("hasAnyRole('PUBLISHER','ADMIN')")
+public ContractView create(@Valid @RequestBody ContractRequest request) {
+    Actor actor = currentUser.require();
+    ContractView view = service.create(request, actor);
+    audit.record(actor, "contract.publish", "contract", view.id().toString(), null, ...);
+    events.publish(CHANNEL, "contract.published", ...);
+    return view;
+}
+```
+
+`SecurityConfig` keeps the dev filter inside the security chain and maps
+Keycloak roles:
+
+```java
+// Before: .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
+// After:
+.oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt
+        .jwtAuthenticationConverter(keycloakRealmRoles())));
+```
+
+**Code — new (key parts).**
+
+The scope constraint is enforced by the database, not just the service
+(`V2__identity_config_audit.sql:99`):
+
+```sql
+CONSTRAINT chk_setting_scope_id
+    CHECK ((scope = 'GLOBAL' AND scope_id IS NULL)
+        OR (scope <> 'GLOBAL' AND scope_id IS NOT NULL))
+```
+
+Precedence is one readable chain (`SettingService.java:34`):
+
+```java
+return find(ConfigScope.USER, userId, key)
+        .or(() -> find(ConfigScope.CONTRACT, contractId, key))
+        .or(() -> find(ConfigScope.ORG, orgId, key))
+        .or(() -> find(ConfigScope.GLOBAL, null, key));
+```
+
+Approval applies the setting and writes the audit entry in one transaction
+(`ConfigRequestService.java:72`):
+
+```java
+ConfigScope scope = request.getContractId() == null ? ConfigScope.ORG : ConfigScope.CONTRACT;
+UUID scopeId = request.getContractId() == null ? request.getOrgId() : request.getContractId();
+settings.set(scope, scopeId, request.getKey(), value, admin);
+request.approve(admin.id(), note);
+```
+
+The dev identity only exists when security is off (`DevAuthenticationFilter.java:26`):
+
+```java
+@Component
+@ConditionalOnProperty(name = "symmetry.security.enabled", havingValue = "false", matchIfMissing = true)
+public class DevAuthenticationFilter extends OncePerRequestFilter {
+    public static final String USER_HEADER = "X-Symmetry-User";
+```
+
+**Verification.** `sg docker -c './mvnw -B verify'` → 36 tests, 0 failures,
+0 skipped. New coverage: `/me`, role 403s, global setting visibility, the
+request → admin approve → scoped setting flow, admin users/analytics/audit, and
+worker scoping.
+
+**References.** `docs/UI-PLAN.md` §6 (UI↔backend contract); previous entry
+(UI plan). UI phase starts next: remove Cloudscape, add Harbor primitives.
+
+## 2026-10-19 — Finalize UI design + backend integration plan (uncommitted)
+
+**What changed.** Added `docs/UI-PLAN.md`, which locks the Harbor/macOS design,
+roles (`WORKER`/`PUBLISHER`/`ADMIN`), the route map (`/user/login`,
+`/user/admin/login`, `/user/*`, `/user/admin/*`), the component inventory, the
+REST contract, and the `V2` data model (`organization`, `app_user`, `setting`,
+`config_request`, `audit_log`). Reconciled every doc that still said
+"React + AWS Cloudscape" (`STACK.md`, `DESIGN.md`, `IMPLEMENTATION.md`,
+`README.md`, `AGENTS.md`, the UML doc/diagram, `ui/README.md`).
+
+**Why (decision).** The owner asked whether the current design is "AWS-flavored
+macOS". It is not: the approved mock is hand-written CSS, while Cloudscape is
+Amazon's AWS visual language and cannot be themed into it. So keeping the Harbor
+design requires a **custom design system + Radix**; Cloudscape is dropped.
+Trade-off: we lose vendor-tested tables/wizards and must own accessibility. The
+rejected alternative was keeping Cloudscape with token overrides, which still
+looks AWS and costs more than owning ~15 primitives. Roles are separate
+(`WORKER` ≠ `PUBLISHER`), admin is **read-only** over users/orgs plus scoped
+overrides, and orgs **request** task-specific tweaks through an audited workflow.
+Config is data with precedence `USER > CONTRACT > ORG > GLOBAL`; analytics are
+donut/bar/line on pre-aggregated SQL views, never browser-side Prometheus.
+
+**Files touched.**
+- `docs/UI-PLAN.md:1` (new — the finalized UI↔backend contract).
+- `docs/STACK.md:8,17,38,49,86,94,198` (UI stack + rationale).
+- `docs/DESIGN.md:34,185`, `docs/IMPLEMENTATION.md:8,29,74`,
+  `README.md:93`, `AGENTS.md:22` (reconciled wording).
+- `docs/diagrams/uml_diagrams.md:91,799,802,809` and
+  `docs/diagrams/symmetry-uml.drawio:43` (UI label).
+- `ui/README.md:3,22` (target design + migration note).
+
+**Code.** Documentation-only change; no `src` code touched yet. Cloudscape is
+removed from `ui/package.json` and `App.tsx` in phase P1.
+
+**References.** `docs/UI-PLAN.md`; previous entry (draw.io diagrams).
+
 ## 2026-10-19 — Add draw.io visual diagrams (boxes, solid/dotted lines) (uncommitted)
 
 **What changed.** Added `docs/diagrams/symmetry-uml.drawio`, an 11-page draw.io

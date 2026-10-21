@@ -88,7 +88,7 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph Browser[Browser]
-      UIAPP["ui/ — React + Cloudscape (Vite, :5173)"]
+      UIAPP["ui/ — React + Harbor design (Vite, :5173)"]
     end
 
     subgraph Host[Docker host / dev machine]
@@ -796,9 +796,10 @@ flowchart TB
 
 ### D25b — UI classes `ui/src/api.ts` + `ui/src/App.tsx` (✅)
 - **Responsibility:** `api.ts` = typed fetch client + `Contract`/`Page<T>`
-  interfaces; `App.tsx` = Cloudscape console (Contracts table + TanStack Query).
+  interfaces; `App.tsx` = console shell (today Cloudscape, target Harbor) with
+  a Contracts table + TanStack Query.
 - **Interfaces:** Fetch API → `/api/contracts` (Vite dev proxy rewrites `/api`
-  → `:8080`); Cloudscape components.
+  → `:8080`); console components (Cloudscape today → Harbor target).
 - **DB:** none (reads via platform).
 - **Use cases:** UC-02 (table), UC-01/03/04/05 (🔜 buttons).
 
@@ -806,7 +807,7 @@ flowchart TB
 sequenceDiagram
     autonumber
     participant U as User
-    participant App as App.tsx (Cloudscape)
+    participant App as App.tsx (console shell)
     participant API as api.ts
     participant Vite as Vite proxy /api
     participant Plat as platform :8080 /contracts

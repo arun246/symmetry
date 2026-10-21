@@ -35,7 +35,8 @@ class DisclosureServiceTest {
 
     private ContractView contract(String tier, JsonNode payload) {
         return new ContractView(UUID.randomUUID(), "module.image.resize", "1.0.0", "optimize",
-                "java", "compute", "draft", tier, "task document", payload, Instant.now());
+                "java", "compute", "draft", tier, "task document", payload,
+                null, null, Instant.now());
     }
 
     @Test

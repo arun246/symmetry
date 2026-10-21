@@ -1,12 +1,25 @@
 package io.symmetry.config;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import io.symmetry.identity.DevAuthenticationFilter;
 
 /**
  * Security wiring.
@@ -20,10 +33,25 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    /**
+     * Keep the dev filter out of the container-wide chain; it belongs inside the
+     * Spring Security chain so it runs after the security context is established.
+     */
     @Bean
     @ConditionalOnProperty(name = "symmetry.security.enabled", havingValue = "false", matchIfMissing = true)
-    SecurityFilterChain openFilterChain(HttpSecurity http) throws Exception {
+    FilterRegistrationBean<DevAuthenticationFilter> devAuthenticationFilterRegistration(
+            DevAuthenticationFilter filter) {
+        FilterRegistrationBean<DevAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "symmetry.security.enabled", havingValue = "false", matchIfMissing = true)
+    SecurityFilterChain openFilterChain(HttpSecurity http,
+            DevAuthenticationFilter devAuthenticationFilter) throws Exception {
         http.csrf(csrf -> csrf.disable())
+                .addFilterBefore(devAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         return http.build();
     }
@@ -35,7 +63,28 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
+                .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt
+                        .jwtAuthenticationConverter(keycloakRealmRoles())));
         return http.build();
+    }
+
+    /**
+     * Keycloak puts roles under {@code realm_access.roles}; Spring expects flat
+     * claims and a {@code ROLE_} prefix. Without this, every {@code hasRole}
+     * check would fail in a real deployment.
+     */
+    private static Converter<Jwt, AbstractAuthenticationToken> keycloakRealmRoles() {
+        return jwt -> {
+            Collection<GrantedAuthority> authorities = new ArrayList<>();
+            Object realm = jwt.getClaim("realm_access");
+            if (realm instanceof Map<?, ?> map && map.get("roles") instanceof Collection<?> roles) {
+                for (Object role : roles) {
+                    authorities.add(new SimpleGrantedAuthority(
+                            "ROLE_" + String.valueOf(role).trim().toUpperCase()));
+                }
+            }
+            String name = jwt.getClaimAsString("email");
+            return new JwtAuthenticationToken(jwt, authorities, name);
+        };
     }
 }

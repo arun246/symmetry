@@ -31,7 +31,7 @@ a worker proposes a **design, a plan, and a rate of pay**, and the work is done 
 **milestones**.
 
 In technology terms, Symmetry is **four services**: a **Java Spring Boot API** (the
-control plane), a **React + AWS Cloudscape** console (the website), a **Python AI
+control plane), a **React** console (the website), a **Python AI
 service** (help writing tasks and submissions), and **Rust→WASM** modules, sitting
 on **PostgreSQL** with **MinIO + Redis**. The choices and reasons are in
 [`STACK.md`](STACK.md).
@@ -182,7 +182,7 @@ we fix the exact tool version so the build comes out the same every time.
 10. Audit Ledger — an append-only history, so nothing can be quietly changed.
 11. Integration SDK — the company's toolkit to pull a winner back in.
 
-The concrete tools each component is built with (Java/Spring, React/Cloudscape,
+The concrete tools each component is built with (Java/Spring, React/custom design system,
 Python/FastAPI, Rust/WASM, PostgreSQL) are listed in [`STACK.md`](STACK.md).
 
 ---

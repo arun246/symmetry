@@ -1,7 +1,9 @@
 # Symmetry UI
 
-The web console, built with **React + AWS Cloudscape** so it looks and behaves
-like the AWS console.
+The web console. React + the custom **Harbor** design system
+(macOS-Settings-inspired, solid surfaces, light/dark) with Radix UI primitives —
+see [`docs/UI-PLAN.md`](../docs/UI-PLAN.md). AWS Cloudscape has been removed; do
+not add Cloudscape screens.
 
 ## Run
 
@@ -21,6 +23,10 @@ npm run build      # type-checks then bundles to dist/
 
 ## Notes
 
-- Cloudscape is React-only and peer-depends on React ≥ 16.8; this app pins React 18.
-- `src/App.tsx` is the console shell (`TopNavigation` + `SideNavigation` + a
-  Contracts table). Add pages for submissions, leaderboard, and new builds next.
+- `src/App.tsx` is the route tree; `src/components/Shell.tsx` is the Harbor
+  window, title bar and role-specific sidebar.
+- Routes: `/user/login`, `/user/admin/login`, `/user/*`, `/user/admin/*` — see
+  `docs/UI-PLAN.md`.
+- Dev sign-in stores a user email in `localStorage` (`symmetry.devUser`) and
+  sends it as `X-Symmetry-User`. The seeded accounts are
+  `worker@symmetry.local`, `publisher@symmetry.local`, `admin@symmetry.local`.

@@ -17,5 +17,7 @@ public record ContractView(
         String disclosureTier,
         String taskDocument,
         JsonNode payload,
+        UUID orgId,
+        UUID createdBy,
         Instant createdAt) {
 }
