@@ -1,6 +1,6 @@
 # Symmetry UI — final design & backend integration plan
 
-Status: **implemented** (Harbor palette, macOS-Settings-inspired, no glass).
+Status: **implemented** (Harbor palette, lightweight ui-Settings-inspired, no glass).
 Pages, router and the typed API client live in `ui/src/`; dev sign-in uses
 `X-Symmetry-User` until Keycloak is connected. This is the contract between the
 UI and the backend. If a screen needs data that is not listed here, the screen is
@@ -15,15 +15,15 @@ Related: `docs/STACK.md` (stack), `docs/DESIGN.md` (product),
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | **Replace AWS Cloudscape** with a small custom design system + **Radix UI** primitives (headless a11y). | The mock is custom CSS; Cloudscape is AWS-looking and cannot be themed into macOS/Harbor. Heavy overrides cost more than owning ~15 primitives. |
+| D1 | **Replace AWS Cloudscape** with a small custom design system + **Radix UI** primitives (headless a11y). | The mock is custom CSS; Cloudscape is AWS-looking and cannot be themed into light weight ui/Harbor. Heavy overrides cost more than owning ~15 primitives. |
 | D2 | **Harbor** greyish-blue tokens, light + dark, **solid surfaces only** (no blur/`backdrop-filter`). | Owner choice; glass hurts legibility and looks dated. |
-| D3 | **Remove the fake traffic lights.** Keep a slim 40 px title bar with the app name and role chip. | Browser tabs have no close/minimise semantics; fake controls mislead. The macOS feel comes from the sidebar, cards, hairlines and type. |
-| D4 | **System font stack**, not SF Pro. | SF Pro is not licensed for the web; `system-ui` renders SF on macOS and Segoe on Windows. |
+| D3 | **Remove the fake traffic lights.** Keep a slim 40 px title bar with the app name and role chip. | Browser tabs have no close/minimise semantics; fake controls mislead. The lightweight ui feel comes from the sidebar, cards, hairlines and type. |
+| D4 | **System font stack**, not SF Pro. | SF Pro is not licensed for the web; `system-ui` renders SF on lightweight ui and Segoe on Windows. |
 | D5 | **Auth = Keycloak** (Authorization Code + PKCE via `oidc-client-ts`), themed with Harbor. Admin is a realm **role**, not a separate system. | Credentials never touch our JS; MFA can be required for admins. |
 | D6 | **Routes:** `/user/login`, `/user/admin/login`. Admin app lives under `/user/admin/*`. | Owner instruction. URL is UX only; authorization is server-side. |
 | D7 | **Roles are distinct:** `WORKER`, `PUBLISHER`, `ADMIN`. | Owner instruction. Drives navigation, landing page and data scoping. |
 | D8 | **Admin is read-only** over users/orgs, plus global/org **overrides**; orgs can **request** a task-specific tweak that an admin reviews. | Owner instruction; limits blast radius and PII exposure. |
-| D9 | **Charts:** donut (≤5 parts) + bar/line. No pie walls. | macOS-quiet charts and honest data visualisation. |
+| D9 | **Charts:** donut (≤5 parts) + bar/line. No pie walls. | light weightui -quiet charts and honest data visualisation. |
 | D10 | **Config is data**, scoped `GLOBAL → ORG → CONTRACT → USER`, versioned and audited. | Per-task customisation without bespoke code paths. |
 | D11 | **Realtime = SSE** (one-way), polling fallback. | Simpler than WebSocket for dashboards; survives proxies. |
 
@@ -402,7 +402,7 @@ an explicit confirm.
 ## 12. Risks / pushback (kept on purpose)
 
 - **Cloudscape removal** costs tested components; we pay with Radix + tests.
-- **macOS inspiration** must not break web expectations (targets, focus, links).
+- **lightweight ui inspiration** must not break web expectations (targets, focus, links).
 - **Config sprawl** is the main risk: allow-listed keys + audit + scope caps.
 - **Realtime** can become noise: live only where actionable.
 - **Two login routes** are cosmetic; a wrong route must still be rejected by
