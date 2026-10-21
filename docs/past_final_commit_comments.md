@@ -35,7 +35,31 @@ When a change is finished and accepted, add an entry **at the top** of
 
 ## Entries
 
-## 2026-10-21 — 0.0.1 release artifacts: database backup and screenshots (uncommitted)
+## 2026-10-21 — Rename UI plan to lightweight mock (commit 7951a45)
+
+**What changed.** Renamed `docs/UI-PLAN.md` to
+`docs/UI_LightWeight_mock.md` and replaced the Apple-specific wording
+("macOS-Settings-inspired", "macOS/Harbor", "macOS feel", "macOS-quiet") with
+"lightweight UI". The Harbor tokens, routes, component rules and implementation
+are unchanged; only the positioning and file name changed.
+
+**Why (decision).** The owner wanted the UI documented as a lightweight mock
+rather than an imitation of a specific operating system. Keeping the visual rules
+but dropping the macOS label avoids implying platform cloning and keeps the
+design language neutral. Trade-off: the old path is gone, so links that still say
+`docs/UI-PLAN.md` must be updated when touched; the content itself did not change.
+
+**Files touched.**
+- `docs/UI_LightWeight_mock.md:1` (renamed; wording changes at lines 3, 18, 20, 21, 26, 405).
+
+**Code — documentation only.** No before/after code blocks required.
+
+**References.** Previous entry (`ffd8a75`); `docs/STACK.md:87`, `ui/README.md:5`
+still mention the old filename.
+
+---
+
+## 2026-10-21 — 0.0.1 release artifacts: database backup and screenshots (commit ffd8a75)
 
 **What changed.** Added a compressed PostgreSQL development snapshot under
 `data/pgsql/0.0.1/`, with checksum and restore instructions. Captured real
@@ -71,7 +95,7 @@ spinners to clear; it reported zero console/page errors. Backend
 
 ---
 
-## 2026-10-21 — Harbor UI: all worker, publisher and admin pages (uncommitted)
+## 2026-10-21 — Harbor UI: all worker, publisher and admin pages (commit ffd8a75)
 
 **What changed.** The React console is now the Harbor UI described in
 `docs/UI-PLAN.md`. AWS Cloudscape is gone. A typed API client, dev auth, theme
@@ -149,7 +173,7 @@ the tier-filtered workbench.
 
 ---
 
-## 2026-10-21 — Config keys are restricted by scope (uncommitted)
+## 2026-10-21 — Config keys are restricted by scope (commit ffd8a75)
 
 **What changed.** `ConfigKeys` now declares which keys may be set at `ORG` /
 `CONTRACT` and which at `USER`; `SettingService` and `ConfigRequestService`
@@ -211,7 +235,7 @@ change.
 
 ---
 
-## 2026-10-21 — Online backend: identity, scoped config, audit, analytics, admin APIs (uncommitted)
+## 2026-10-21 — Online backend: identity, scoped config, audit, analytics, admin APIs (commit ffd8a75)
 
 **What changed.** The platform is now an online, role-aware API. V2 adds
 `organization`, `app_user`, `setting`, `config_request`, `audit_log`, and
