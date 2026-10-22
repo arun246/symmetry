@@ -1,0 +1,9 @@
+Symmetry
+Copyright 2026 Symmetry contributors
+
+This product includes software developed by the Symmetry contributors and
+third-party components under their own licences.
+
+The SBOM produced by the build is the authoritative list of third-party
+components and licences. Signing keys, holdout tests and release infrastructure
+are not part of the open-source distribution.

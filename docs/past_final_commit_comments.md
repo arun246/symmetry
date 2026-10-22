@@ -35,6 +35,224 @@ When a change is finished and accepted, add an entry **at the top** of
 
 ## Entries
 
+## 2026-10-22 — Phase 1 runner protocol and control plane (uncommitted)
+
+**What changed.** Added the control-plane side of the publisher-runner protocol:
+runner registration with a one-time bearer token, heartbeat, lease of one accepted
+contract, Ed25519-signed result submission, revocation/quarantine, and admin
+listing. Flyway `V3` adds `runner`, `job_lease` and `runner_result`. The protocol is
+covered by four Postgres/Testcontainers integration tests.
+
+**Why (decision).** ADR-0004 requires deadline-bound leases, idempotent signed
+results and lease-and-retry failover. This slice implements those rules in the
+control plane without pretending the appliance or evaluator exists yet. The
+runner authenticates with a bearer token whose SHA-256 hash is stored, and every
+result is additionally signed with the runner's Ed25519 key. A stolen token alone
+therefore cannot forge a verdict. The signed message binds the lease, nonce,
+contract and the SHA-256 of the **exact JSON text** the runner sent, avoiding a
+canonical-JSON implementation on both sides.
+
+Trade-offs accepted: a completed lease stays completed when its runner is
+revoked (its result is quarantined, so the job can be re-run); an expired lease
+cannot submit late; registration is disabled until the operator sets
+`SYMMETRY_RUNNER_REGISTRATION_TOKEN`; the lease currently returns only contract
+identity and task-document hash because submissions/source binding do not exist
+yet. Rejected: user JWTs for machine runners (no machine identity yet), signing
+only selected parsed fields (tamperable metrics), accepting results after expiry
+(unsafe), and a plain container as the runner boundary (ADR-0001).
+
+**Files touched.**
+- `platform/src/main/resources/db/migration/V3__runner_protocol.sql:11` (`runner`), `:65` (`job_lease`), `:97` (one active lease per contract), `:106` (`runner_result`).
+- `platform/src/main/java/io/symmetry/runner/Runner.java:22`, `JobLease.java:13`, `RunnerResult.java:17` (entities).
+- `platform/src/main/java/io/symmetry/runner/RunnerAuthService.java:25` (registration token and bearer auth).
+- `platform/src/main/java/io/symmetry/runner/RunnerService.java:62` (register), `:114` (lease), `:146` (signed result), `:207` (revoke/quarantine).
+- `platform/src/main/java/io/symmetry/runner/RunnerController.java:25` (HTTP surface).
+- `platform/src/main/java/io/symmetry/runner/RunnerRepository.java`, `JobLeaseRepository.java`, `RunnerResultRepository.java` (persistence).
+- `platform/src/main/java/io/symmetry/contract/ContractRepository.java:48` (lease query).
+- `platform/src/main/java/io/symmetry/contract/MessageSigner.java:50` (result signature message and key check).
+- `platform/src/main/java/io/symmetry/config/SecurityConfig.java:69` (machine POSTs bypass user JWT).
+- `platform/src/main/resources/application.properties:23` (registration token and lease seconds).
+- `platform/src/test/java/io/symmetry/runner/RunnerApiIntegrationTest.java:59` (register/heartbeat/lease/idempotent result), `:96` (tamper), `:115` (revocation/quarantine), `:157` (bad token).
+
+**Code — modified files.**
+
+Before (`MessageSigner.java`): only the acceptance message existed.
+After (at `:50`):
+
+```java
+public static String canonicalResultMessage(UUID leaseId, String nonce, UUID contractId,
+        String payloadHash) {
+    return "result:" + leaseId + ":" + nonce + ":" + contractId + ":" + payloadHash;
+}
+```
+
+Before (`SecurityConfig.java`): every non-health request needed a user JWT.
+After (at `:69`):
+
+```java
+.requestMatchers(HttpMethod.POST, "/runners/register").permitAll()
+.requestMatchers(HttpMethod.POST, "/runners/*/heartbeat",
+        "/runners/*/lease", "/runners/*/results").permitAll()
+```
+
+The runner endpoints authenticate with the issued bearer token instead. Admin
+`GET /runners*` and `POST /runners/{id}/revoke` still require a normal session.
+
+Before (`ContractRepository.java`): ended at the module-version lookup.
+After (at `:48`): a locked query that leases only accepted contracts without an
+active/completed lease or a live result. `lock.timeout=-2` maps to
+`FOR UPDATE SKIP LOCKED`, so two runners cannot take the same job.
+
+```java
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
+@Query("""
+        select c from Contract c
+         where c.lifecycleState = io.symmetry.task.LifecycleState.ACCEPTED
+           and not exists (select l.id from JobLease l
+                where l.contractId = c.id
+                  and (l.status = io.symmetry.runner.LeaseStatus.ACTIVE
+                       or l.status = io.symmetry.runner.LeaseStatus.COMPLETED))
+           and not exists (select r.id from RunnerResult r
+                where r.contractId = c.id and r.quarantined = false)
+         order by c.createdAt asc
+        """)
+List<Contract> findLeasable(Pageable pageable);
+```
+
+**Code — new files (key parts).**
+
+Registration stores only the token hash (`RunnerService.java:62`):
+
+```java
+RunnerAuthService.IssuedToken token = RunnerAuthService.issueToken();
+Runner runner = new Runner(UUID.randomUUID(), request.name().trim(), ...,
+        token.hash(), request.version().trim(), capabilities);
+runners.saveAndFlush(runner);
+return new RegisteredRunnerView(runner.getId(), token.raw(),
+        runner.getStatus().name().toLowerCase(), runner.getRegisteredAt(), leaseSeconds);
+```
+
+The lease carries a deadline and nonce; expiry is retried instead of blocking
+(`RunnerService.java:114`):
+
+```java
+leases.expireStale(now);
+JobLease lease = new JobLease(UUID.randomUUID(), runner.getId(), contract.getId(),
+        RunnerAuthService.newNonce(), now, now.plusSeconds(leaseSeconds));
+```
+
+The result is verified before storage, then marks the lease complete
+(`RunnerService.java:146`):
+
+```java
+String payloadHash = MessageSigner.sha256(request.payload());
+String message = MessageSigner.canonicalResultMessage(lease.getId(), lease.getNonce(),
+        lease.getContractId(), payloadHash);
+if (!MessageSigner.verify(runner.getPublicKey(), request.signature(), message)) {
+    throw badRequest("Result signature does not verify with the runner public key");
+}
+...
+lease.complete(now);
+```
+
+Revocation expires active leases and quarantines all of the runner's results, so
+payment-critical work can be re-run elsewhere (`RunnerService.java:207`):
+
+```java
+runner.revoke(now);
+leases.revokeActiveForRunner(runnerId);
+results.quarantineForRunner(runnerId);
+```
+
+**Verification.** `sg docker -c './mvnw -B verify'` passed: **40 tests, 0 failures**,
+including the four new runner integration tests. Flyway applied V1–V3 against
+PostgreSQL 16.15.
+
+**References.** [ADR-0001](../docs/adr/0001-runner-isolation.md),
+[ADR-0004](../docs/adr/0004-updates-and-failover.md),
+[API surface](../docs/DESIGN.md#11-the-buttons-and-doors-api-surface),
+previous entry (uncommitted ADR change). Next: the appliance agent and the
+submission/source binding that gives a lease real code to evaluate.
+
+---
+
+## 2026-10-22 — Runner isolation, licensing and AI payment ADRs (uncommitted)
+
+**What changed.** Added six architecture decision records and a licence map, then
+reconciled the design, stack, implementation and agent docs with them. The runner
+is now a **publisher-hosted AlmaLinux 9 appliance** that runs untrusted code in
+**KVM microVMs**. The JVM, Chicory/WASM and CPython tiers are inner layers, not the
+host boundary. Added the split licence (Apache-2.0 agent/SDK, AGPL-3.0 server),
+signed OTA plus offline bundles, AI-final payment with escrow and one human
+appeal, and the AWS/GCP nested-virt support tiers.
+
+**Why (decision).** The previous docs described the Java path as a locked-down
+container and left the runner, update and payment decisions open. That was too
+weak for hostile code and payment-critical evaluation, and it did not match the
+owner's choices: publisher-owned hardware/electricity, software and updates from
+Symmetry, x86-64 KVM, Java/Rust/Python, AI-final payment, open-source updates and
+a Red Hat-style commercial model.
+
+Trade-offs accepted: KVM needs `/dev/kvm`, so unsupported cloud hosts fail
+preflight instead of silently falling back to Docker; three language runtimes add
+image size and CVE work; AGPL may require a commercial exception for some
+enterprises; AI-final needs escrow, an appeal and a liability cap to be defensible.
+Rejected: Docker/chroot as the boundary, cloud-first hosting, RHEL qcow2
+redistribution, unsigned updates, and AI-final with no appeal.
+
+**Key decisions recorded.**
+
+| Topic | Decision |
+|---|---|
+| Isolation | KVM microVM; Firecracker preferred; Kata on the neutral Kubernetes fleet |
+| Host/guest | AlmaLinux 9 host; Alpine guests; glibc guests for Java/Python when needed |
+| Images | qcow2/OVA; AWS AMI and GCP image only on nested-virt instance types |
+| Licensing | Apache-2.0 `runner/` + `wasm-sdk/`; AGPL-3.0 `platform/` + `ai/` + `ui/` + `deploy/` |
+| Payment | AI-final first decision; escrow; one evidence-based human appeal; liability cap |
+| Updates | TUF-style signed OTA plus signed offline bundles; A/B rollback |
+| Failover | Lease-and-retry; signed results; no live migration in V1 |
+
+**Files touched.**
+- `docs/adr/README.md:1` (ADR index).
+- `docs/adr/0001-runner-isolation.md:1` (KVM microVM boundary).
+- `docs/adr/0002-licensing.md:1` (Apache/AGPL split).
+- `docs/adr/0003-ai-adjudication.md:1` (AI-final, escrow, one appeal).
+- `docs/adr/0004-updates-and-failover.md:1` (signed OTA, leases).
+- `docs/adr/0005-language-runtimes.md:1` (Java, Rust, Python).
+- `docs/adr/0006-cloud-appliance.md:1` (qcow2, AMI, GCP image).
+- `LICENSING.md:1` (path-by-path licence map).
+- `LICENSE-APACHE:1`, `LICENSE-AGPL:1` (canonical licence texts).
+- `CONTRIBUTING.md:1` (DCO and contribution licences), `NOTICE:1`.
+- `docs/DESIGN.md:33` (services, microVM boundary, payment, data model, API, risks).
+- `docs/STACK.md:12` (runner appliance, neutral evaluator, licensing).
+- `docs/IMPLEMENTATION.md:24` (outer microVM and three runtime tiers).
+- `AGENTS.md:3` (load-bearing decisions and verify rules).
+- `README.md:105` (supported runner hosts and licensing summary).
+- `docs/NEW-BUILDS.md:32` (Java/Rust/Python are the first three, not the limit).
+- `ui/README.md:3` (stale UI-plan link fixed to the lightweight mock).
+
+**Code — documentation only.** No application code changed. The key architectural
+snippet is the boundary rule:
+
+```text
+AlmaLinux 9 host
+  └── KVM microVM (Firecracker/Kata)
+        ├── Java 21 (JVM tier)
+        ├── Rust (wasm32 in Chicory)
+        └── Python 3.13 (CPython)
+```
+
+**Verification.** Relative links checked across the changed docs; existing
+`platform/`, `ui/` and `ai/` checks were not affected by this documentation-only
+change. The `runner/` verify command does not exist yet and is explicitly marked
+as unverified in `AGENTS.md`.
+
+**References.** [ADR index](../docs/adr/README.md), [LICENSING.md](../LICENSING.md),
+previous entry (`7951a45`).
+
+---
+
 ## 2026-10-21 — Rename UI plan to lightweight mock (commit 7951a45)
 
 **What changed.** Renamed `docs/UI-PLAN.md` to

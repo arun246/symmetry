@@ -10,6 +10,7 @@ import java.security.Signature;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.UUID;
 
 /**
  * Fingerprinting and verification for signed acceptance records.
@@ -39,6 +40,30 @@ public final class MessageSigner {
     /** The exact text a worker signs when accepting a task document. */
     public static String canonicalAcceptMessage(String moduleId, String version, String taskDocumentHash) {
         return "accept:" + moduleId + "@" + version + ":" + taskDocumentHash;
+    }
+
+    /**
+     * The exact text a runner signs for a result. The payload hash is over the
+     * exact JSON text the runner sent, so no canonical-JSON implementation is
+     * needed on either side.
+     */
+    public static String canonicalResultMessage(UUID leaseId, String nonce, UUID contractId,
+            String payloadHash) {
+        return "result:" + leaseId + ":" + nonce + ":" + contractId + ":" + payloadHash;
+    }
+
+    /** True if the value is a usable Ed25519 public key (X.509, base64). */
+    public static boolean validPublicKey(String publicKeyBase64) {
+        if (publicKeyBase64 == null || publicKeyBase64.isBlank()) {
+            return false;
+        }
+        try {
+            KeyFactory.getInstance(ALGORITHM)
+                    .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(publicKeyBase64)));
+            return true;
+        } catch (GeneralSecurityException | IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /**

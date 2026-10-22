@@ -95,7 +95,8 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
 - **Submission** — the source code a worker sends in.
 - **Oracle** — the hidden answer key; how we decide if code is correct.
 - **Gate** — the checkpoint a submission must pass before it can be compared.
-- **Sandbox** — a safe box where untrusted code runs so it cannot cause harm.
+- **Sandbox** — a KVM microVM where untrusted code runs so it cannot harm the
+  publisher's host. A plain container is not a trust boundary.
 - **Pareto frontier** — the "still in the race" list; you only drop off if some
   other part beats you on *everything* (more in `docs/DESIGN.md`).
 
@@ -106,14 +107,35 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
 - **Target:** proprietary (closed, company-owned) software.
 - **Two kinds of work:** `optimize` an existing module, or `build` a brand-new app.
 - **Worker language:** any language the task committee's existing software uses
-  (for `optimize`), or the language the worker proposes (for `build`). Not limited
-  to Java and Rust.
+  (for `optimize`), or the language the worker proposes (for `build`). Java, Rust
+  and Python are the first supported entries, not the limit.
 - **How we judge:** correctness first, then speed and memory (for `optimize`); a
   quality rubric and milestone reviews (for `build`).
-- **Built with:** a **Java Spring Boot API**, **Rust→WASM** modules, a **Python AI**
-  service, **PostgreSQL**, and a **React** UI with a custom macOS-style design. See
-  [docs/STACK.md](docs/STACK.md).
+- **Built with:** a **Java Spring Boot control plane**, a **publisher-hosted KVM
+  runner**, **Rust→WASM** modules, a **Python AI** service, **PostgreSQL**, and a
+  **React** UI with a custom Harbor design. See [docs/STACK.md](docs/STACK.md).
+- **Runner:** the publisher owns the hardware and electricity; Symmetry owns the
+  software, signed updates and support. Untrusted code runs in a **KVM microVM**,
+  never in a plain container. See [docs/adr/](docs/adr/).
+- **Payment:** a third-party AI makes the first decision, with money in escrow and
+  one evidence-based human appeal.
+- **Licensing:** Apache-2.0 for the runner agent and SDK; AGPL-3.0 for the server;
+  commercial support and updates. See [LICENSING.md](LICENSING.md).
 - **The hard problem:** verify without leaking.
+
+---
+
+## Supported runner hosts
+
+| Tier | Host | Image |
+|---|---|---|
+| 1 | Bare metal, Proxmox, plain KVM | qcow2 / OVA |
+| 2 | AWS or GCP, only on nested-virt instance types | AMI / GCP image |
+| Unsupported | Any host without `/dev/kvm` | Fails preflight; no Docker fallback |
+
+The appliance is AlmaLinux 9 with Alpine microVM guests; Java and Python use a
+glibc guest where musl breaks compatibility. The neutral evaluator runs on
+Kubernetes + Kata/Firecracker hardware that Symmetry controls.
 
 ---
 
@@ -125,3 +147,5 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
 - [docs/NEW-BUILDS.md](docs/NEW-BUILDS.md) — building brand-new apps: proposals,
   design, rates, milestones, and the quality bar.
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — how to build the first parts.
+- [docs/adr/](docs/adr/) — accepted runner, licensing, AI and update decisions.
+- [LICENSING.md](LICENSING.md) — which path uses which licence.

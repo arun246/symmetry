@@ -30,11 +30,12 @@ There is also a second kind of work, described in
 a worker proposes a **design, a plan, and a rate of pay**, and the work is done in
 **milestones**.
 
-In technology terms, Symmetry is **four services**: a **Java Spring Boot API** (the
-control plane), a **React** console (the website), a **Python AI
-service** (help writing tasks and submissions), and **Rust→WASM** modules, sitting
-on **PostgreSQL** with **MinIO + Redis**. The choices and reasons are in
-[`STACK.md`](STACK.md).
+In technology terms, Symmetry is a **Java Spring Boot control plane**, a **React**
+console, a **Python AI service**, a **publisher-hosted runner appliance**
+(AlmaLinux + KVM microVMs), and a **Rust→WASM module SDK**, sitting on
+**PostgreSQL** with **MinIO + Redis**. The choices and reasons are in
+[`STACK.md`](STACK.md); the runner and licensing decisions are in the
+[ADR index](adr/).
 
 **Target:** proprietary (closed, company-owned) software.
 **Two kinds of work:** `optimize` an existing module, or `build` a new app.
@@ -93,6 +94,12 @@ These are the promises that keep the system honest.
    we keep a record of what happened and who did it.
 8. **Fail closed.** If anything is unclear — an unknown system call, a build that
    will not repeat exactly, a tampered answer key — we reject. We do not guess.
+9. **Untrusted code runs in a KVM microVM.** The JVM, Chicory and Python tiers are
+   inner layers. A plain container is not the host boundary. If `/dev/kvm` is
+   missing, the runner refuses to start; it does not fall back to Docker.
+10. **Every update and result is signed.** The publisher appliance pulls signed
+    updates (online or as an offline bundle), and the runner signs its results.
+    Open-source code does not prove that a downloaded binary is genuine.
 
 ---
 
@@ -113,14 +120,14 @@ Here is the same diagram, then explained box by box.
                 │ submit signed source + accepted task doc      │ pull winner
                 ▼                                               ▼
         ┌──────────────────────── Eval Fabric (federated) ────────────────────────┐
-        │  Build: javac (JDK 21) │ rustc (pinned)  → bytecode / wasm / binary       │
-        │  Platform Runners (JVM tier + WASM/Chicory tier)  │  Company Eval Node   │
-        │  · unit/property/fuzz · differential vs incumbent │  (TEE / on-prem)     │
-        │  · binary-vs-goal match · resource metering       │  · hidden corpus +   │
-        │                                                   │    holdout + canaries│
+        │  Build: javac (JDK 21) │ rustc (pinned) │ CPython (pinned)              │
+        │  Publisher Appliance (AlmaLinux + KVM microVM)  │  Neutral Evaluator    │
+        │  · JVM / Chicory / Python tiers                 │  (K8s + Kata, our     │
+        │  · no network · signed result                   │   bare metal)         │
+        │  · unit/property/fuzz · differential            │  · hidden holdout      │
         └───────────────────────────┬──────────────────────────────────────────────┘
                                      ▼  signed verdict + Pareto metrics (tests never leave)
-                              Compile → Gate → Score → Leaderboard → Payout
+                       Compile → Gate → AI adjudication → Leaderboard → Escrow
 ```
 
 **The Platform Control Plane** is the main website. It holds a **registry**
@@ -143,8 +150,11 @@ It helps them pull a winning module back into their system.
 
 **The Eval Fabric** is the group of machines that build and test submissions. It
 is **federated**, meaning it can run in more than one place at once:
-- **Platform Runners** run the *public* checks (build it, run simple tests, compare
-  against the old code, measure speed/memory).
+- **Publisher Appliance** runs the *public* checks (build it, run simple tests,
+  compare against the old code, measure speed/memory) inside KVM microVMs on the
+  publisher's hardware.
+- **Neutral Evaluator** reruns payment-critical checks on Kubernetes + Kata on
+  hardware Symmetry controls, independent of the publisher's host.
 - **Company Eval Node** runs the *secret* checks (the real hidden data) inside the
   company's own walls, or in a **TEE**. A TEE (Trusted Execution Environment) is a
   locked safe room inside a computer where code runs and even the room's owner
@@ -157,9 +167,10 @@ we fix the exact tool version so the build comes out the same every time.
 
 **Trust boundaries** are the lines where the level of trust changes:
 
-- **TB1 (worker ↔ platform).** The worker's code is untrusted. It runs in a
-  **sandbox** — a safe box with no internet, no writing to disk, and a strict list
-  of allowed actions.
+- **TB1 (worker ↔ platform).** The worker's code is untrusted. It runs inside a
+  **KVM microVM** (Firecracker or Kata) with no internet, a read-only root, and
+  host-enforced limits. The JVM, Chicory and Python tiers are inner layers. A
+  plain container is not the boundary; a chroot is not a security boundary.
 - **TB2 (platform ↔ company).** Only *results* cross this line: a signed verdict
   (pass/fail) and a few numbers. The real test data never leaves the company.
 - **TB3 (eval ↔ production).** Before a winning part goes into the real product,
@@ -178,12 +189,19 @@ we fix the exact tool version so the build comes out the same every time.
 6. Eval Fabric — the federated build-and-test machines.
 7. Scoring & Leaderboard — the gate and the rankings.
 8. Identity/Reputation — who is who, and how much to trust them.
-9. Payments/Escrow — safe money handling with a dispute window.
+9. Payments/Escrow — safe money handling, AI adjudication and one human appeal.
 10. Audit Ledger — an append-only history, so nothing can be quietly changed.
 11. Integration SDK — the company's toolkit to pull a winner back in.
+12. Runner Registry — registers publisher appliances, leases jobs and verifies
+    signed results.
+13. Publisher Appliance — the AlmaLinux image with KVM microVMs and signed updates
+    that runs on the publisher's hardware.
+14. AI Adjudicator — decides payment from structured evidence; one human appeal.
+15. Neutral Evaluator — Kubernetes + Kata/Firecracker on hardware we control for
+    payment-critical reruns.
 
 The concrete tools each component is built with (Java/Spring, React/custom design system,
-Python/FastAPI, Rust/WASM, PostgreSQL) are listed in [`STACK.md`](STACK.md).
+Python/FastAPI, Rust/WASM, PostgreSQL, AlmaLinux/KVM) are listed in [`STACK.md`](STACK.md).
 
 ---
 
@@ -328,15 +346,21 @@ full in [`NEW-BUILDS.md`](NEW-BUILDS.md).
 ## 7. How workers get paid and trusted (marketplace)
 
 - **Escrow:** when a contract is published, the money is set aside with a trusted
-  neutral party. It is released when the winning part is **merged** (added to the
-  company's real system), not merely when it tops the leaderboard.
+  neutral party. It is released only after the correctness gate, the AI payment
+  decision and the appeal window.
+- **AI-final:** the AI adjudicator (independent of the publisher and worker) makes
+  the first payment decision from a structured evidence bundle. It is final unless
+  the worker uses the one appeal.
+- **One human appeal:** a worker may appeal once with evidence. A human reviewer
+  sees the same evidence and the AI's reasons, then upholds, reverses or remands.
+  There is no human review of every payment.
 - **The worker accepts the task document first**, then submits. Both events are
   recorded.
 - **Reputation** grows from parts that were actually merged and used in
   production — not from raw submissions. One person pretending to be many
   accounts ("Sybil") is blocked by identity limits and caps on new accounts.
-- **Disputes:** there is a waiting period. A disputed result can be re-checked on a
-  second, independent runner.
+- **Disputes:** payment-critical results can be re-run on the neutral evaluator.
+  The decision log records the model version, policy and evidence hashes.
 - **New-build pay is different.** For `build` work, pay is hourly and/or fixed-price
   per **milestone**, released as milestones pass — never a blank check for hours.
   The full model (proposals, rates, quality bar, anti-padding rules) is in
@@ -357,24 +381,36 @@ full in [`NEW-BUILDS.md`](NEW-BUILDS.md).
   (SBOM — a list of what is inside), built reproducibly, and re-checked before merge.
   Dependencies are checked against an allowed-license list, so a copyleft or
   forbidden license cannot slip in unnoticed.
+- **Signed updates:** the publisher appliance pulls signed OTA metadata over
+  outbound mTLS. Air-gapped sites use the same signed bundle. Open-source code
+  does not authenticate a downloaded binary; the signature does.
+- **AI payment policy:** the contract states that an AI makes the first decision,
+  the appeal window, the evidence it sees and the liability cap. Model name,
+  version, prompt hash and output hash are stored with the decision.
+- **Licensing:** the runner agent and SDK are Apache-2.0; the control plane and AI
+  service are AGPL-3.0; support, updates, signing keys and holdouts are commercial
+  or private. See [ADR-0002](adr/0002-licensing.md).
 - **Legal:** liability and indemnity terms, and which country's law applies, are
-  set per contract.
+  set per contract. Automated payment decisions may create a right to explanation
+  or human review in some jurisdictions; the one-appeal path is the answer.
 
 ---
 
 ## 9. From a submission to the real product
 
 ```
-accept task doc → submit → compile → gate → pareto rank → human review gate
-→ escrow release → signed binary → company-node re-verification → merge behind flag
-→ production telemetry → maintenance contract (optional)
+accept task doc → submit → compile → gate → pareto rank → AI adjudication
+→ one human appeal window → escrow release → signed binary → neutral re-verification
+→ merge behind flag → production telemetry → maintenance contract (optional)
 ```
 
 In plain terms: the worker agrees, submits, their code is built and checked and
-ranked, a human gives a final look, the money is released, the exact signed build
-is re-checked on the company's machine, added to the real product *behind a flag*
-(so it can be turned off quickly if something is wrong), watched in production, and
-optionally kept healthy with a maintenance deal.
+ranked. The AI adjudicator makes the first payment decision from the evidence.
+The worker gets one appeal if they disagree. The money is released from escrow,
+the exact signed build is re-checked on the company's machine or the neutral
+evaluator, added to the real product *behind a flag* (so it can be turned off
+quickly if something is wrong), watched in production, and optionally kept healthy
+with a maintenance deal.
 
 The reason we stress this whole pipeline: in real life, the *integration* work
 (adding a part into a big system and keeping it healthy) is often more expensive
@@ -397,6 +433,16 @@ Each of these is a "thing" the system remembers:
   and which acceptance it belongs to.
 - **Build** — the tool version used and the fingerprint of the built result.
 - **EvaluationRun** — one judging run: the verdict, the numbers, the random seed.
+- **Runner** — a registered publisher appliance: host details, capabilities,
+  public key, version and health.
+- **JobLease** — the deadline-bound permission for one runner to work on one job.
+- **SignedResult** — the runner's signed verdict, logs digest, metrics and artifact
+  digest.
+- **AdjudicationDecision** — the AI's payment decision, evidence hashes, model and
+  policy version.
+- **Appeal** — one worker appeal with evidence, reviewer and outcome.
+- **UpdateRelease** — a signed appliance version, manifest, SBOM and rollback
+  target.
 - **LeaderboardEntry** — a ranked position.
 - **Bounty** — the reward offered for a contract.
 - **Escrow** — the held money and its state.
@@ -425,6 +471,13 @@ GET  /submissions/{id}/verdict        gate result + Pareto numbers (sanitized)
 GET  /contracts/{id}/leaderboard      the rankings
 POST /bounties/{id}/award             release the reward
 POST /integrations/{id}/merge         add the winner to the real product
+POST /runners/register                join a publisher appliance with a token
+POST /runners/{id}/heartbeat          report health and capabilities
+POST /runners/{id}/lease              lease one job (deadline + nonce)
+POST /runners/{id}/results            submit a signed result
+POST /submissions/{id}/adjudicate     ask the AI adjudicator for a payment decision
+POST /payments/{id}/appeal            open the one evidence-based human appeal
+GET  /updates/{channel}/manifest      signed update metadata for the appliance
 ```
 
 The `build` track adds more doors (proposals, milestones, quality reports,
@@ -440,7 +493,11 @@ handover). They are listed in [`NEW-BUILDS.md`](NEW-BUILDS.md).
 | A secret leaks through the shape or the sample data | disclosure tiers; TEE | any real leak happens |
 | People game the scores | rotating secret questions; Pareto | scores go up but the product does not improve |
 | Integration costs more than it saves | toolkit; feature flags; re-checking | the total cost is the same or higher than building in-house |
-| A language is hard to run safely in the sandbox | run it in a locked-down container (see IMPLEMENTATION); add a language to the registry only once it can run safely | a sandbox escape or an untrustworthy measurement |
+| A language is hard to run safely in the sandbox | run it inside the KVM microVM; add a language to the registry only once it can run safely | a microVM escape or an untrustworthy measurement |
+| The publisher host cannot expose `/dev/kvm` | preflight fails; use bare metal or the neutral evaluator; never fall back to Docker | a runner silently runs with a weaker boundary |
+| A cloud instance has no nested virtualisation | certify instance types; test `/dev/kvm` at boot | a “supported” cloud host that cannot run jobs |
+| The AI denies a valid payment | escrow; evidence bundle; one human appeal; liability cap | a pattern of reversals or unexplained denials |
+| An update mirror is compromised | signed metadata; anti-rollback; offline verification; key custody | a publisher applies an unsigned or rolled-back image |
 | Fake accounts abuse trust | reputation; caps; escrow | any payout fraud |
 | Too few modules are verifiable | an eligibility filter | fewer than a set number of contracts per quarter |
 
@@ -460,17 +517,21 @@ Each step has a clear "we are done when" test.
 2. **P1 Contract & task document (2–4 weeks).** Build one real contract and task
    document, with the acceptance flow. *Done when:* ten people can read it and
    correctly predict what will pass and what will fail, and acceptance is enforced.
-3. **P2 Eval Fabric (4–8 weeks).** The build service (starting with Java and Rust)
-   via the toolchain registry, the sandboxes, the checkpoints (properties, fuzzing,
-   comparison, hidden questions), and the measurements. *This is the hardest 80% of
-   the work.* *Done when:* results repeat exactly, there are no side doors, and the
-   first languages work.
+3. **P2 Eval Fabric (4–8 weeks).** The build service (starting with Java, Rust and Python)
+   via the toolchain registry, the KVM microVM and its inner runtime tiers, the
+   checkpoints (properties, fuzzing, comparison, hidden questions), and the
+   measurements. *This is the hardest 80% of the work.* *Done when:* results repeat
+   exactly, there are no side doors, and the first languages work.
+   - **P2b Publisher appliance (2–4 weeks).** qcow2/OVA image, preflight, join
+     token, signed OTA and A/B rollback. *Done when:* a publisher imports the
+     image, passes preflight and runs a signed job. See ADRs 0001, 0004 and 0006.
 4. **P3 Trust & IP (3–5 weeks).** The locked safe room (TEE) or on-premise node,
    signing, the audit ledger, and the rights flow. *Done when:* the secret tests
    never leave the company's machine.
-5. **P4 Marketplace (3–5 weeks).** Reward, escrow, reputation, disputes. *Done
-   when:* money can move safely.
-6. **P5 Integration (ongoing).** The toolkit, the human review gate, merging, and
+5. **P4 Marketplace (3–5 weeks).** Reward, escrow, AI adjudication, one human
+   appeal, reputation and disputes. *Done when:* money can move safely and every
+   decision can be replayed.
+6. **P5 Integration (ongoing).** The toolkit, neutral re-verification, merging and
    rollback. *Done when:* one crowd-built part is running in production.
 7. **P6 Proposals & review (the `build` track).** Briefs, proposals (design + plan
    + rate), rubric scoring, and an optional design bake-off.
@@ -484,11 +545,12 @@ Each step has a clear "we are done when" test.
 
 ## 14. The smallest first version (MVP)
 
-Start tiny: one company, one kind of module, one evaluator machine, sample data at
+Start tiny: one company, one kind of module, one KVM runner, sample data at
 tier L1, a leaderboard, and **no money at all**. The contract format and the build
 service are built to support **any language** through the toolchain registry, but
-the first proof may launch with only the language the existing code uses (Java and
-Rust are simply the first two compilers). The `build` track comes later.
+the first proof may launch with only the language the existing code uses (Java,
+Rust and Python are the first three runtime entries). The `build` track comes
+later.
 
 The goal of the MVP is narrow: prove that **crowd-built code can be verified and
 can beat the old code**. Do that before adding locked rooms (TEEs) or payments.
@@ -498,13 +560,19 @@ can beat the old code**. Do that before adding locked rooms (TEEs) or payments.
 ## 15. Things we have not decided yet
 
 - Which language the first module uses (whichever the existing software is written
-  in; Java and Rust are the first two compilers we support).
+  in; Java, Rust and Python are the first three runtime entries).
 - When to add the `build` track (proposals, rates, milestones) — see P6–P7 above.
-- The Java sandbox path — a locked-down container, or the discouraged Java-to-WASM
-  route (see `docs/IMPLEMENTATION.md` for why the container is preferred).
+- Which cloud instance types are certified for nested virtualisation in AWS and
+  GCP (see [ADR-0006](adr/0006-cloud-appliance.md)).
+- Which escrow provider, liability cap and appeal window apply to AI-final
+  payments (see [ADR-0003](adr/0003-ai-adjudication.md)).
+- Whether the AI adjudicator stays on the same model or moves to an independent
+  model once volume justifies it.
+- Whether to add native Rust as a separate toolchain tier alongside `wasm32`.
 - Whether to use a TEE now or an on-premise node later.
 - Who writes the task documents and hidden tests — the company's engineers or a
   platform team.
 - The exact rule for "verifiable enough" to be allowed in.
+- Which licence applies to `docs/` (see [LICENSING.md](../LICENSING.md)).
 - For `build` work: the default pay shape, rubric weights, and how strict the
   proposal trust tiers are (see `docs/NEW-BUILDS.md`).

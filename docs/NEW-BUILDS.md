@@ -29,9 +29,10 @@ The **first version** of Symmetry only does `optimize`. `build` is a later stage
 
 ---
 
-## 2. Languages are not limited to Java and Rust
+## 2. Languages are not limited to Java, Rust and Python
 
-The earlier docs said "Java or Rust." That was wrong as a rule. The correct rule:
+The earlier docs said "Java or Rust." That was wrong as a rule. Java, Rust and
+Python are the first three supported runtimes, not the limit. The correct rule:
 
 - **Existing software:** whatever language(s) the **task-submitting committee**
   declares. It might be Java, C, C++, Go, Python, TypeScript, Kotlin, or several at
@@ -43,7 +44,7 @@ The earlier docs said "Java or Rust." That was wrong as a rule. The correct rule
 
 **What this means for the platform:** adding a language must be "plug in a new
 compiler," not "edit the center." We call that list-of-compilers a **toolchain
-registry**. Java and Rust are just the **first two** entries.
+registry**. Java, Rust and Python are just the **first three** entries.
 
 ---
 
@@ -289,4 +290,5 @@ review rubrics, milestones, and the quality gate. Treat it as its own phase:
 - The exact rubric weights, and who reviews — the company alone, or with platform
   senior reviewers.
 - How strict the trust tiers are before a worker may submit a design proposal.
-- Which stacks the platform supports first, beyond the initial Java and Rust.
+- Which stacks the platform supports first, beyond the initial Java, Rust and
+  Python runtimes.

@@ -5,8 +5,9 @@ This document explains the **first two stages** of the plan in
 special word is explained the first time it appears.
 
 The full technology choices (and why) live in [`docs/STACK.md`](STACK.md): a
-**Java Spring Boot API**, a **React UI**, a **Python AI
-service**, **Rust→WASM modules**, **PostgreSQL**, and **MinIO + Redis**.
+**Java Spring Boot API**, a **React UI**, a **Python AI service**, a
+**publisher-hosted KVM runner appliance**, **Rust→WASM modules**, **PostgreSQL**,
+and **MinIO + Redis**.
 
 We are building the part that proves the idea works: that a piece of code sent in
 by a stranger can be **built**, **checked for correctness**, and **ranked** — all
@@ -26,25 +27,28 @@ designed to accept any language the task committee names).
 | The main website ("control plane") | **Java 21 + Spring Boot 4** | Spring Boot is a popular kit for building web servers in Java; it already matches the `oct/java/` folder. |
 | Build tool for our own code | **Maven** (with a "wrapper") | Maven assembles our project and its libraries. A "wrapper" ships the tool *with* the project so the build does not depend on what is installed on the computer. |
 | Database | **PostgreSQL 16+**, with **Testcontainers** for tests | A database is where we store records. We use Postgres for real in every environment (never H2 — it behaves differently and gives false confidence). |
-| UI console | **React + custom Harbor design system** | macOS-Settings-inspired, solid surfaces, light/dark; Radix for accessible primitives. |
+| UI console | **React + custom Harbor design system** | Lightweight, solid surfaces, light/dark; Radix for accessible primitives. |
 | AI service | **Python + FastAPI** | Help for writing tasks and submissions, behind a model gateway. |
 | Artifacts / queue | **MinIO (S3) + Redis** | Store submitted files; run and rate-limit evaluation jobs. |
-| Worker languages | **Any language the task names** | For `optimize`, the committee sets it from the existing software. Java and Rust are simply the first two the platform can build; more are added through a **toolchain registry**. |
+| Worker languages | **Any language the task names** | For `optimize`, the committee sets it from the existing software. Java, Rust and Python are the first three the platform can build; more are added through a **toolchain registry**. |
 | Java build | **javac** (the standard Java compiler), version 21, fixed | Compiles the worker's Java.
 | Rust build | **rustc** (the standard Rust compiler), fixed | Compiles the worker's Rust.
-| Running untrusted Java | **A locked-down container (JVM tier)** | We run risky code inside an isolated box so it cannot harm anything. This is the *preferred* Java path. (Earlier we considered turning Java into WASM — a different format — but that throws away Java's speed tricks and measures the wrong thing. It is now a discouraged exception.) |
-| Running untrusted Rust | **Chicory** running **WASM** | WASM is a safe, portable format. Chicory is a Java library that runs WASM code inside our Java program. A WASM module with *no* outside connections cannot touch the internet or files at all — safe by construction. |
+| Running untrusted Java | **KVM microVM + JVM tier** | The JVM runs inside a fresh microVM with no network and host-enforced limits. The JVM tier is an inner layer; a plain container is not the boundary. (Earlier we considered turning Java into WASM — a different format — but that throws away Java's speed tricks and measures the wrong thing.) |
+| Running untrusted Rust | **KVM microVM + Chicory** running **WASM** | WASM is a safe, portable format. Chicory is a Java library that runs WASM code inside our Java program. The microVM is the outer boundary; WASM has no outside connections. |
+| Running untrusted Python | **KVM microVM + CPython 3.13** | Python runs in a glibc guest with a pinned interpreter and offline wheels, inside the same microVM boundary. |
+| Publisher appliance | **AlmaLinux 9 + KVM + Firecracker/Kata** | The image the publisher imports. It runs the microVMs, signs results and pulls signed updates. |
 | Property tests | **jqwik** (Java) / **proptest** (Rust) | Tools that test code with *many* randomly generated inputs, checking that a rule is *always* true. |
 | Task documents | **Markdown (readable text) + a machine-readable checklist** | The worker reads it and accepts it before starting. |
 
-**Why two ways to run code:** the platform has to handle more than one language, so
-it has more than one "runner." Rust modules become WASM (very safe to run). Java
-modules run in a locked-down container (also safe, and it keeps Java fast). This is
+**Why multiple runtime tiers:** the platform has to handle more than one language.
+Every job runs in the same **KVM microVM** outer boundary. Inside it, the runtime
+tier differs: Java uses the JVM (to keep the JIT), Rust uses WASM in Chicory (safe
+by construction) and Python uses CPython with pinned, offline wheels. This is
 called being **polyglot** — able to work with more than one language.
 
-**Not only two languages.** Java and Rust are just the first two entries in a
-**toolchain registry**. Adding C, Go, Python, or TypeScript later means plugging in
-a new compiler, not changing the center. (A second, quite different kind of work —
+**Not only three languages.** Java, Rust and Python are just the first three
+entries in a **toolchain registry**. Adding C, Go, or TypeScript later means
+plugging in a new compiler, not changing the center. (A second, quite different kind of work —
 building brand-new apps, with proposals and hourly rates — is described in
 [`NEW-BUILDS.md`](NEW-BUILDS.md), and comes after this plan.)
 
@@ -57,6 +61,7 @@ A map of the folders, with a note on what lives where:
 ```
 symmetry/
   docs/                        # these design documents
+    adr/                       # architecture decision records (runner, licensing, AI)
   deploy/                      # docker-compose: Postgres, MinIO, Redis, Keycloak
   platform/                    # the main website + the evaluator (one program)
     pom.xml                     # Maven's list of what to build and which libraries
@@ -65,14 +70,16 @@ symmetry/
       config/      # security wiring (JWT optional; off for local dev)
       contract/    # job-card object, rules, validator, disclosure, acceptance
       task/        # work kind + lifecycle labels (the "sockets")
-      build/       # toolchain registry + Java/Rust connectors
-      eval/        # keycard + checker/gate types (sandboxes land in M3)
+      build/       # toolchain registry + Java/Rust/Python connectors
+      eval/        # keycard + checker/gate types (microVM runners land in M3)
+      runner/      # control-plane protocol: registration, leases, signed results
       scoring/     # flexible metric vector (Pareto ranking lands in M5)
       # planned: submission/ , trust/ , store/ , api/
     src/main/resources/db/migration/   # Flyway migrations (V1 baseline)
     src/test/java/io/symmetry/         # our own tests
   ui/                          # React + custom Harbor design system (Vite)
-  ai/                          # Python FastAPI AI service
+  ai/                          # Python FastAPI AI service + payment adjudicator
+  runner/                      # AlmaLinux appliance, KVM microVM launcher, guest images
   wasm-sdk/                    # Rust module SDK; modules/image-resize is the ABI example
   .github/workflows/           # CI: Maven, npm, pip, cargo
   # planned: agreements/ , contracts/ , tasks/ , examples/image-resize/ (M2) , workbench-cli/
@@ -243,32 +250,51 @@ public workbench.
 
 - **JavaBuilder** runs `javac` (version 21, fixed) on the worker's Java.
 - **RustBuilder** runs `rustc` (fixed) to produce WASM.
-- Both must produce the **same result every time** from the same source. We
+- **PythonBuilder** checks the source with a pinned CPython 3.13 and an offline
+  wheel set.
+- All must produce the **same result every time** from the same source. We
   fingerprint (hash) the result and remember which tool version made it.
 
-**The sandbox** is where untrusted code runs. We have two:
+**The outer sandbox is a KVM microVM.** Each job gets a fresh Firecracker or Kata
+microVM with no network device, a read-only root and a size-capped output
+directory. CPU, memory, disk, wall clock and output size are enforced by the host,
+not trusted from inside the guest. A plain container or a chroot is not the host
+boundary; if `/dev/kvm` is missing, the runner refuses to start.
 
-- **WASM tier (Chicory):** we load the WASM module in a fresh mini-computer for
+Inside the microVM we have three runtime tiers:
+
+- **WASM tier (Chicory) for Rust:** we load the WASM module in a fresh runtime for
   each run. We register **no outside connections at all**, so the code physically
   cannot use the internet, files, the clock, randomness, or extra threads. We give
   it a **fuel limit** (a budget of "steps" it may take, like a game meter) and a
   **memory limit** (a cap on how much it may remember). A wall clock timer is a
   backup. When fuel runs out, the module stops.
-- **JVM tier (for Java that cannot become WASM):** the Java runs inside a separate
-  locked-down container with no internet, a read-only disk, and a supervisor
-  watching it. This is slightly weaker isolation, so we label those results as such.
+- **JVM tier for Java:** the JVM runs inside the microVM with no internet, a
+  read-only disk, and a supervisor watching it. The JVM keeps the JIT and measures
+  the real target.
+- **CPython tier for Python:** CPython runs inside the microVM with a pinned
+  interpreter, offline wheels and no network. Native extensions are allowed only
+  from the pinned wheel set.
 
-Both tiers follow the same rules:
+All tiers follow the same rules:
 
 - **Determinism check:** run the same input twice. If the two results differ, the
   module is rejected — it is not predictable.
+- **Signed result:** the runner signs the verdict, logs digest and metrics. The
+  control plane rejects an unsigned or tampered result.
 - A crash, an out-of-memory, or running out of fuel is treated as a normal
   "failed the checkpoint," never as something that breaks our system.
 
 **Done when:** code that tries to connect to the outside fails to start; an
-infinite loop hits the fuel limit; an unpredictable module is rejected; three runs
-of a good module give identical results; and submissions in the languages we have
-built (Java and Rust) work.
+infinite loop hits the fuel/time limit; an unpredictable module is rejected; three
+runs of a good module give identical results; a tampered result is refused; and
+submissions in Java, Rust and Python work inside the microVM.
+
+**Status:** the control-plane half of the runner protocol is in place: runner
+registration, heartbeat, deadline-bound leases, Ed25519-signed results and
+revocation/quarantine (`platform/src/main/java/io/symmetry/runner/`). The appliance
+agent, KVM microVM launcher, guest images and the submission/source binding are
+still pending, so the done criteria above are **not** met yet.
 
 ---
 
@@ -331,8 +357,8 @@ fingerprinted. Verdicts are signed. The full journey is:
 **accept → submit → build → gate → score → verdict.**
 
 **Done when:** the whole journey works for the practice module in the languages we
-have built so far (Java and Rust); a broken module is rejected at the expected step;
-the leaderboard shows the correct Pareto order.
+have built so far (Java, Rust and Python); a broken module is rejected at the
+expected step; the leaderboard shows the correct Pareto order.
 
 ---
 
@@ -343,7 +369,8 @@ the leaderboard shows the correct Pareto order.
 | Unit tests | JUnit 5 | small pieces: contract rules, acceptance gating, Pareto math, tier filtering |
 | Property tests | jqwik | "always true" rules and scoring behavior |
 | Integration tests | Spring Boot Test + Testcontainers Postgres | the web addresses work end to end, including the accept flow |
-| Adversarial tests | hand-built bad modules (Java + Rust) | forbidden access, infinite loops, unpredictability, overfitting to the exam |
+| Adversarial tests | hand-built bad modules (Java + Rust + Python) | forbidden access, infinite loops, unpredictability, overfitting to the exam |
+| Runner tests | pytest + KVM integration tests | preflight, no-network guest, signed result, lease retry, OTA rollback |
 | Reproducibility | repeated runs | the same source always gives the same verdict |
 
 **CI** means "continuous integration" — an automatic check that runs whenever code
@@ -355,14 +382,18 @@ and integration tests.
 ## 10. "We are done with P2 when"
 
 - One contract completes the full accept→submit→build→verdict journey.
-- **The languages we have built so far (Java and Rust)** submissions build and are
-  evaluated, and the registry makes adding a third a matter of plugging in a compiler.
+- **Java, Rust and Python** submissions build and are evaluated inside the KVM
+  microVM, and the registry makes adding another language a matter of plugging in a
+  runtime.
 - The same source gives the same verdict across three runs.
 - There are no side doors: the internet, files, clock, randomness, and extra
   threads are impossible or blocked.
+- A result signed by the runner verifies; a tampered result is rejected.
 - Every checkpoint catches the bad module built to trip it.
 - The explanation a worker sees leaks no secret data, and missing acceptance or
   agreements block entry.
+- The publisher appliance passes preflight, runs a signed job, and rolls back a
+  failed update.
 
 When all of these hold, P2 is finished and P3 (locked safe room, signing, audit
 ledger) can begin.
@@ -373,12 +404,16 @@ ledger) can begin.
 
 | Risk | How we reduce it |
 |---|---|
-| Java does not compile cleanly to WASM | Prefer the JVM-tier container for Java; label its weaker isolation in results. |
-| The container is weaker isolation than WASM | Prefer the WASM path; send high-value contracts only to WASM-eligible modules. |
+| Java does not compile cleanly to WASM | Keep the JVM inside the microVM; do not convert Java to WASM. |
+| The inner tier is weaker than WASM | Keep the KVM microVM as the outer boundary; label the inner tier in results. |
+| A cloud host has no `/dev/kvm` | Preflight fails; use bare metal or the neutral evaluator. |
+| Python wheels need glibc | Use a glibc guest image for Python; do not force Alpine/musl. |
 | Memory numbers differ between tiers | Report a "relative" number and label it per tier. |
-| Builds are not repeatable (javac/rustc drift) | Fix tool versions; fingerprint results; reject if the fingerprint drifts. |
+| Builds are not repeatable (javac/rustc/python drift) | Fix tool versions; vendor dependencies; fingerprint results; reject drift. |
 | Overfitting to the secret exam | Rotate questions, use trick inputs, always compare to the old code. |
 | A malicious AI-generated submission | Require the AI declaration, add human review, use trick inputs. |
+| An AI payment denial is wrong | Escrow, evidence bundle, one human appeal, liability cap. |
+| A signed update is rolled back or tampered | TUF metadata, anti-rollback, key custody, offline verification. |
 | The answer key is too weak | An eligibility filter: modules we cannot verify are not allowed in. |
 
 ---
@@ -390,10 +425,16 @@ ledger) can begin.
    gating, and the M1 web addresses.
 3. Build the disclosure checker and the agreements (M1b).
 4. Add the first practice module and the old version in its existing language (M2).
-5. Build the compilers (JavaBuilder, RustBuilder) behind the toolchain registry, and
-   the WASM sandbox (M3).
+5. Build the compilers (JavaBuilder, RustBuilder, PythonBuilder) behind the
+   toolchain registry, the KVM microVM, and the WASM/JVM/Python inner tiers (M3).
+6. Build the runner protocol, the publisher appliance, signed OTA and the neutral
+   evaluator. See [ADR-0001](adr/0001-runner-isolation.md),
+   [ADR-0004](adr/0004-updates-and-failover.md) and
+   [ADR-0006](adr/0006-cloud-appliance.md).
+7. Build the AI adjudicator and escrow flow. See
+   [ADR-0003](adr/0003-ai-adjudication.md).
 
 **A decision still open from P0:** the first practice module and its language —
-default to **Java** (it matches the `oct/java/` folder), with the Rust path built
+default to **Java** (it matches the `oct/java/` folder), with Rust and Python built
 the same way. The `build` track (new apps, proposals, rates) is a later phase; see
 [`NEW-BUILDS.md`](NEW-BUILDS.md).
