@@ -44,7 +44,23 @@ export function AcceptancesPage() {
       header: "Lifecycle",
       cell: (row) => <Badge tone={stateTone(row.lifecycleState)}>{row.lifecycleState}</Badge>,
     },
-    { header: "Accepted", cell: (row) => <span className="small muted">{formatDate(row.acceptedAt)}</span> },
+    {
+      header: "Status",
+      cell: (row) => (
+        <Badge tone={row.status === "WITHDRAWN" ? "warn" : "success"}>
+          {row.status === "WITHDRAWN" ? "withdrawn" : "active"}
+        </Badge>
+      ),
+    },
+    {
+      header: "Accepted",
+      cell: (row) => (
+        <span className="small muted">
+          {formatDate(row.acceptedAt)}
+          {row.withdrawnAt && <> · nullified {formatDate(row.withdrawnAt)}</>}
+        </span>
+      ),
+    },
   ];
 
   return (

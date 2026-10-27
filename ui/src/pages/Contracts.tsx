@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import type { WorkerAcceptance } from "../api";
 import { useMe } from "../auth";
 import { formatDate, formatJson } from "../format";
 import {
@@ -31,10 +32,12 @@ const DEFAULT_PAYLOAD = `{
 export function ContractsPage() {
   const me = useMe();
   const publisher = me.data?.role === "PUBLISHER";
+  const worker = me.data?.role === "WORKER";
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [applied, setApplied] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const [nullifying, setNullifying] = useState<NullifyTarget | null>(null);
 
   const contracts = useQuery({
     queryKey: ["contracts", publisher ? "org" : "all", page, applied],
@@ -42,12 +45,32 @@ export function ContractsPage() {
       publisher ? api.orgContracts(page, 50) : api.listContracts(page, 50, applied || undefined),
   });
 
+  // The worker's own acceptances decide what this list hides. Withdrawal is
+  // per-worker, so another worker still sees the same contract.
+  const mine = useQuery({
+    queryKey: ["worker-acceptances"],
+    queryFn: () => api.workerAcceptances(),
+    enabled: worker,
+  });
+  const acceptanceByContract = useMemo(() => {
+    const byContract = new Map<string, WorkerAcceptance>();
+    for (const acceptance of mine.data ?? []) {
+      byContract.set(acceptance.contractId, acceptance);
+    }
+    return byContract;
+  }, [mine.data]);
+
   const rows = useMemo(() => {
     const content = contracts.data?.content ?? [];
-    if (!publisher || !applied) return content;
+    // A nullified contract leaves this worker's list; the row is kept in the
+    // database because the signed acceptance is audit proof.
+    const visible = worker
+      ? content.filter((contract) => acceptanceByContract.get(contract.id)?.status !== "WITHDRAWN")
+      : content;
+    if (!publisher || !applied) return visible;
     const needle = applied.toLowerCase();
-    return content.filter((contract) => contract.moduleId.toLowerCase().includes(needle));
-  }, [contracts.data, publisher, applied]);
+    return visible.filter((contract) => contract.moduleId.toLowerCase().includes(needle));
+  }, [contracts.data, publisher, applied, worker, acceptanceByContract]);
 
   const columns: Column<(typeof rows)[number]>[] = [
     {
@@ -77,14 +100,35 @@ export function ContractsPage() {
     {
       header: "",
       align: "right",
-      cell: (contract) => (
-        <Link
-          className="btn small"
-          to={`/user/contracts/${encodeURIComponent(contract.moduleId)}/${encodeURIComponent(contract.version)}`}
-        >
-          Open
-        </Link>
-      ),
+      cell: (contract) => {
+        const acceptance = acceptanceByContract.get(contract.id);
+        const canNullify = worker && acceptance != null && acceptance.status !== "WITHDRAWN";
+        return (
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <Link
+              className="btn small"
+              to={`/user/contracts/${encodeURIComponent(contract.moduleId)}/${encodeURIComponent(contract.version)}`}
+            >
+              Open
+            </Link>
+            {canNullify && (
+              <Button
+                small
+                variant="danger"
+                onClick={() =>
+                  setNullifying({
+                    id: contract.id,
+                    moduleId: contract.moduleId,
+                    version: contract.version,
+                  })
+                }
+              >
+                Nullify
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -95,7 +139,7 @@ export function ContractsPage() {
         subtitle={
           publisher
             ? "Job cards owned by your organization. Publishing is audited and bound to your account."
-            : "Public job cards. Open one to read the task document at its disclosure tier."
+            : "Older job-card registry. It has no code editor; coding tasks live on the Task board."
         }
         actions={
           publisher ? (
@@ -175,7 +219,134 @@ export function ContractsPage() {
       </Card>
 
       {publisher && <PublishDialog open={publishing} onOpenChange={setPublishing} />}
+      {worker && (
+        <NullifyDialog
+          key={nullifying?.id ?? "none"}
+          contract={nullifying}
+          onOpenChange={(open) => {
+            if (!open) setNullifying(null);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** The legacy contract row a worker is about to nullify. */
+type NullifyTarget = { id: string; moduleId: string; version: string };
+
+/** Mirrors the reason codes ContractService accepts; the server re-checks them. */
+const WITHDRAWAL_REASONS = [
+  { code: "task-unclear", label: "The task is unclear or underspecified" },
+  { code: "requirements-changed", label: "The requirements changed after I accepted" },
+  { code: "cannot-test", label: "I cannot test it (no suite, no environment)" },
+  { code: "not-enough-time", label: "I do not have enough time" },
+  { code: "outside-skills", label: "It is outside my skills or toolchain" },
+  { code: "other", label: "Other — explain in the comment" },
+];
+
+function NullifyDialog({
+  contract,
+  onOpenChange,
+}: {
+  contract: NullifyTarget | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [reasons, setReasons] = useState<string[]>([]);
+  const [comment, setComment] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const needsComment = reasons.includes("other");
+  const ready = reasons.length > 0 && (!needsComment || comment.trim().length > 0);
+
+  const withdraw = useMutation({
+    mutationFn: () => {
+      if (!contract) throw new Error("No contract selected");
+      return api.withdrawContract(contract.id, {
+        reasons,
+        comment: comment.trim() || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      queryClient.invalidateQueries({ queryKey: ["worker-acceptances"] });
+      queryClient.invalidateQueries({ queryKey: ["worker-summary"] });
+      onOpenChange(false);
+    },
+    onError: (mutationError: Error) => setError(mutationError.message),
+  });
+
+  return (
+    <Dialog
+      open={contract != null}
+      onOpenChange={onOpenChange}
+      title="Nullify this contract"
+      subtitle={
+        contract
+          ? `${contract.moduleId}@${contract.version} will leave your list. The signed acceptance stays on record.`
+          : undefined
+      }
+      footer={
+        <>
+          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            variant="danger"
+            disabled={!ready || withdraw.isPending}
+            onClick={() => {
+              setError(null);
+              withdraw.mutate();
+            }}
+          >
+            {withdraw.isPending ? "Nullifying" : "Nullify contract"}
+          </Button>
+        </>
+      }
+    >
+      {error && <ErrorBox>{error}</ErrorBox>}
+      <p className="small muted">
+        Tell us why you cannot complete it. This is final: the contract disappears from your list and
+        you cannot accept this version again.
+      </p>
+      <div className="grid" style={{ gap: 10 }}>
+        {WITHDRAWAL_REASONS.map((reason) => (
+          <label key={reason.code} className="row" style={{ alignItems: "flex-start", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={reasons.includes(reason.code)}
+              onChange={(event) => {
+                setReasons((current) =>
+                  event.target.checked
+                    ? [...current, reason.code]
+                    : current.filter((code) => code !== reason.code),
+                );
+              }}
+            />
+            <span>{reason.label}</span>
+          </label>
+        ))}
+      </div>
+      <Field
+        label={needsComment ? "Comment (required for “other”)" : "Comment (optional)"}
+        hint="Up to 2000 characters."
+      >
+        <textarea
+          className="textarea"
+          rows={4}
+          maxLength={2000}
+          value={comment}
+          onChange={(event) => setComment(event.target.value)}
+          placeholder="Anything the publisher should know."
+        />
+      </Field>
+      <span className="small muted" aria-live="polite">
+        {reasons.length === 0
+          ? "Select at least one reason."
+          : needsComment && comment.trim().length === 0
+            ? "Describe the reason when “other” is selected."
+            : `${reasons.length} reason(s) selected.`}
+      </span>
+    </Dialog>
   );
 }
 
@@ -198,14 +369,14 @@ function PublishDialog({
   const [error, setError] = useState<string | null>(null);
 
   const publish = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(payload);
       } catch {
         throw new Error("Payload is not valid JSON");
       }
-      return api.publishContract({
+      const created = await api.publishContract({
         moduleId,
         version,
         taskKind,
@@ -215,6 +386,7 @@ function PublishDialog({
         taskDocument,
         payload: parsed,
       });
+      return api.publishContractRecord(created.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
@@ -292,10 +464,21 @@ export function ContractDetailPage() {
   const moduleId = params.moduleId ?? "";
   const version = params.version ?? "";
   const me = useMe();
+  const queryClient = useQueryClient();
+  const [publishError, setPublishError] = useState<string | null>(null);
   const contract = useQuery({
     queryKey: ["contract", moduleId, version],
     queryFn: () => api.getContract(moduleId, version),
     enabled: Boolean(moduleId && version),
+  });
+  const publish = useMutation({
+    mutationFn: () => api.publishContractRecord(contract.data?.id ?? ""),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contract", moduleId, version] });
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      setPublishError(null);
+    },
+    onError: (mutationError: Error) => setPublishError(mutationError.message),
   });
 
   if (contract.isLoading) {
@@ -314,6 +497,17 @@ export function ContractDetailPage() {
         actions={
           <div className="row">
             <Badge tone={stateTone(data.lifecycleState)}>{data.lifecycleState}</Badge>
+            {data.lifecycleState === "draft"
+              && (me.data?.role === "PUBLISHER" || me.data?.role === "ADMIN") && (
+                <Button
+                  variant="primary"
+                  small
+                  disabled={publish.isPending}
+                  onClick={() => publish.mutate()}
+                >
+                  {publish.isPending ? "Publishing" : "Publish to workers"}
+                </Button>
+              )}
             <Link className="btn small" to="/user/contracts">
               Back
             </Link>
@@ -328,6 +522,11 @@ export function ContractDetailPage() {
           </div>
         }
       />
+      {publishError && <ErrorBox>{publishError}</ErrorBox>}
+      <Notice>
+        This is the older contract track. Acceptance records a signature but opens no editor. Use the{" "}
+        <Link to="/user/exercises">Task board</Link> to accept a coding task and open its workspace.
+      </Notice>
       <div className="grid grid-4">
         <Kpi label="Task kind" value={data.taskKind} />
         <Kpi label="Language" value={data.language} />
@@ -460,7 +659,12 @@ export function WorkbenchPage() {
           </Link>
         }
       />
-      {receipt && <Notice>{receipt}</Notice>}
+      {receipt && (
+        <Notice>
+          {receipt} This track has no code editor.{" "}
+          <Link to="/user/exercises">Open the coding task board</Link>.
+        </Notice>
+      )}
       {error && <ErrorBox>{error}</ErrorBox>}
 
       <div className="grid grid-2">
@@ -521,6 +725,9 @@ export function WorkbenchPage() {
           <Button small variant="ghost" onClick={() => setSelected([])}>
             Clear
           </Button>
+          <span className="small muted" aria-live="polite">
+            {selected.length} of {AGREEMENTS.length} selected
+          </span>
           <span className="small muted">
             Worker identity: <span className="mono">{me.data?.email}</span>
           </span>

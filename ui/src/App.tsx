@@ -9,6 +9,15 @@ import { AcceptancesPage, EarningsPage, SubmissionsPage } from "./pages/Worker";
 import { AnalyticsPage, EvaluationsPage, PaymentsPage, WorkersPage } from "./pages/Publisher";
 import { SettingsPage } from "./pages/Settings";
 import {
+  ExerciseDetailPage,
+  ExerciseSubmissionsPage,
+  ExercisesPage,
+  MyTasksPage,
+  PublicTasksPage,
+  TaskCreatorPage,
+  WorkspacePage,
+} from "./pages/Exercises";
+import {
   AdminAnalyticsPage,
   AdminOverviewPage,
   AuditPage,
@@ -49,12 +58,47 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<PublicTasksPage />} />
+        <Route path="/tasks/:id" element={<ExerciseDetailPage publicView />} />
         <Route path="/user/login" element={<Login />} />
         <Route path="/user/admin/login" element={<Login admin />} />
         <Route path="/user" element={<Shell />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<OverviewPage />} />
+          <Route path="exercises" element={<ExercisesPage />} />
+          <Route
+            path="exercises/new"
+            element={
+              <RequireRole allow={["PUBLISHER", "ADMIN", "WORKER"]}>
+                <TaskCreatorPage />
+              </RequireRole>
+            }
+          />
+          <Route path="exercises/:id" element={<ExerciseDetailPage />} />
+          <Route
+            path="exercises/:id/submissions"
+            element={
+              <RequireRole allow={["PUBLISHER", "ADMIN", "WORKER"]}>
+                <ExerciseSubmissionsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="my-tasks"
+            element={
+              <RequireRole allow={["WORKER"]}>
+                <MyTasksPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="workspace/:id"
+            element={
+              <RequireRole allow={["WORKER"]}>
+                <WorkspacePage />
+              </RequireRole>
+            }
+          />
           <Route path="contracts" element={<ContractsPage />} />
           <Route path="contracts/:moduleId/:version" element={<ContractDetailPage />} />
           <Route

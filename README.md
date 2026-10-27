@@ -114,13 +114,18 @@ then do we compare speed and memory. A super-fast part that is wrong never wins.
 - **Built with:** a **Java Spring Boot control plane**, a **publisher-hosted KVM
   runner**, **Rust→WASM** modules, a **Python AI** service, **PostgreSQL**, and a
   **React** UI with a custom Harbor design. See [docs/STACK.md](docs/STACK.md).
+- **Working now:** the public task list at `/` and an exercise authoring flow
+  (public GitHub import, Java stub extraction, signed acceptance, static checks).
+  It does not compile, execute or pay for code yet; see
+  [docs/adr/0007-exercise-authoring-track.md](docs/adr/0007-exercise-authoring-track.md).
 - **Runner:** the publisher owns the hardware and electricity; Symmetry owns the
   software, signed updates and support. Untrusted code runs in a **KVM microVM**,
   never in a plain container. See [docs/adr/](docs/adr/).
 - **Payment:** a third-party AI makes the first decision, with money in escrow and
   one evidence-based human appeal.
-- **Licensing:** Apache-2.0 for the runner agent and SDK; AGPL-3.0 for the server;
-  commercial support and updates. See [LICENSING.md](LICENSING.md).
+- **Licensing:** one licence, **AGPL-3.0**, for the whole repository (runner,
+  SDK, server, AI, UI, deploy, docs); commercial support and updates. See
+  [LICENSING.md](LICENSING.md).
 - **The hard problem:** verify without leaking.
 
 ---

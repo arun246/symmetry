@@ -64,6 +64,153 @@ export interface WorkerAcceptance {
   taskDocumentHash: string;
   verified: boolean;
   acceptedAt: string;
+  status: "ACTIVE" | "WITHDRAWN" | string;
+  withdrawnAt: string | null;
+}
+
+export interface Withdrawal {
+  acceptanceId: string;
+  contractId: string;
+  status: string;
+  reasons: string[];
+  comment: string | null;
+  withdrawnAt: string;
+}
+
+export interface Exercise {
+  id: string;
+  title: string;
+  summary: string;
+  language: string;
+  status: string;
+  version: number;
+  complexity: string;
+  priceCents: number;
+  currency: string;
+  deadlineDays: number;
+  publicTestCount: number;
+  stubCount: number;
+  parentExerciseId: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface ExerciseSource {
+  repoUrl: string;
+  repoOwner: string;
+  repoName: string;
+  commitSha: string;
+  filePath: string;
+  blobSha: string | null;
+  license: string | null;
+  language: string;
+  contentHash: string;
+  content: string | null;
+  findings: string[];
+}
+
+export interface ExerciseStub {
+  id: string;
+  symbolName: string;
+  symbolKind: string;
+  startLine: number;
+  endLine: number;
+  stubContent: string;
+  originalHash: string;
+}
+
+export interface ExerciseTest {
+  id: string;
+  stubId: string | null;
+  name: string;
+  visibility: string;
+  content: string;
+  timeoutMs: number;
+}
+
+export interface ExerciseSideCase {
+  id: string;
+  testId: string | null;
+  name: string;
+  visibility: string;
+  input: unknown;
+  expected: unknown;
+}
+
+export interface ExerciseDetail {
+  id: string;
+  title: string;
+  summary: string;
+  language: string;
+  status: string;
+  version: number;
+  complexity: string;
+  priceCents: number;
+  currency: string;
+  deadlineDays: number;
+  taskDocument: string;
+  source: ExerciseSource | null;
+  stubs: ExerciseStub[];
+  tests: ExerciseTest[];
+  sideCases: ExerciseSideCase[];
+  parentExerciseId: string | null;
+  createdBy: string;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface RepoTree {
+  repoUrl: string;
+  repoOwner: string;
+  repoName: string;
+  commitSha: string;
+  license: string | null;
+  files: { path: string; sha: string; size: number }[];
+}
+
+export interface SymbolInfo {
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+  bodyStartLine: number;
+  bodyEndLine: number;
+  signature: string;
+}
+
+export interface ExerciseAcceptance {
+  id: string;
+  exerciseId: string;
+  workerId: string;
+  taskDocumentHash: string;
+  verified: boolean;
+  status: string;
+  acceptedAt: string;
+  deadlineAt: string;
+}
+
+export interface Workspace {
+  exercise: ExerciseDetail;
+  sessionId: string;
+  acceptanceId: string;
+  status: string;
+  deadlineAt: string;
+  executionEnabled: boolean;
+}
+
+export interface StaticCheckResult {
+  passed: boolean;
+  findings: string[];
+}
+
+export interface ExerciseSubmission {
+  id: string;
+  exerciseId: string;
+  workerId: string;
+  status: string;
+  contentHash: string;
+  staticFindings: unknown;
+  submittedAt: string;
 }
 
 export interface MetricPoint {
@@ -142,7 +289,7 @@ export interface SettingRow {
 }
 
 const USER_KEY = "symmetry.devUser";
-export const DEFAULT_USER = "publisher@symmetry.local";
+export const DEFAULT_USER = "worker@symmetry.local";
 
 export function getDevUser(): string {
   return localStorage.getItem(USER_KEY) ?? DEFAULT_USER;
@@ -213,8 +360,60 @@ export const api = {
     ),
   publishContract: (input: Record<string, unknown>) =>
     request<Contract>("/contracts", { method: "POST", ...body(input) }),
+  publishContractRecord: (id: string) =>
+    request<Contract>(`/contracts/${id}/publish`, { method: "POST" }),
   acceptContract: (id: string, input: Record<string, unknown>) =>
     request<Acceptance>(`/contracts/${id}/accept`, { method: "POST", ...body(input) }),
+  withdrawContract: (id: string, input: { reasons: string[]; comment?: string | null }) =>
+    request<Withdrawal>(`/contracts/${id}/withdraw`, { method: "POST", ...body(input) }),
+
+  listExercises: (page = 0, size = 50) =>
+    request<Page<Exercise>>(`/exercises?page=${page}&size=${size}`),
+  listMyExercises: (page = 0, size = 50) =>
+    request<Page<Exercise>>(`/exercises/mine?page=${page}&size=${size}`),
+  getExercise: (id: string) => request<ExerciseDetail>(`/exercises/${id}`),
+  createExercise: (input: Record<string, unknown>) =>
+    request<ExerciseDetail>("/exercises", { method: "POST", ...body(input) }),
+  createSubtask: (parentId: string, input: Record<string, unknown>) =>
+    request<ExerciseDetail>(`/exercises/${parentId}/subtasks`, { method: "POST", ...body(input) }),
+  updateExercise: (id: string, input: Record<string, unknown>) =>
+    request<ExerciseDetail>(`/exercises/${id}`, { method: "PATCH", ...body(input) }),
+  githubTree: (repoUrl: string) =>
+    request<RepoTree>(`/exercises/github/tree?repoUrl=${encodeURIComponent(repoUrl)}`),
+  importExerciseSource: (id: string, repoUrl: string, filePath: string) =>
+    request<ExerciseSource>(`/exercises/${id}/source`, {
+      method: "POST",
+      ...body({ repoUrl, filePath }),
+    }),
+  exerciseSymbols: (id: string) => request<SymbolInfo[]>(`/exercises/${id}/symbols`),
+  addExerciseStub: (id: string, symbolName: string, startLine: number) =>
+    request<ExerciseStub>(`/exercises/${id}/stubs`, {
+      method: "POST",
+      ...body({ symbolName, startLine }),
+    }),
+  saveExerciseTests: (id: string, tests: unknown[], sideCases: unknown[]) =>
+    request<ExerciseTest[]>(`/exercises/${id}/tests`, {
+      method: "PUT",
+      ...body({ tests, sideCases }),
+    }),
+  publishExercise: (id: string) =>
+    request<ExerciseDetail>(`/exercises/${id}/publish`, { method: "POST" }),
+  acceptExercise: (id: string, input: Record<string, unknown>) =>
+    request<ExerciseAcceptance>(`/exercises/${id}/accept`, { method: "POST", ...body(input) }),
+  exerciseWorkspace: (id: string) => request<Workspace>(`/exercises/${id}/workspace`),
+  staticCheckExercise: (id: string, content: string) =>
+    request<StaticCheckResult>(`/exercises/${id}/static-check`, {
+      method: "POST",
+      ...body({ content }),
+    }),
+  submitExercise: (id: string, content: string) =>
+    request<ExerciseSubmission>(`/exercises/${id}/submissions`, {
+      method: "POST",
+      ...body({ content }),
+    }),
+  exerciseSubmissions: (id: string) =>
+    request<ExerciseSubmission[]>(`/exercises/${id}/submissions`),
+  acceptedExercises: () => request<ExerciseAcceptance[]>("/exercises/accepted"),
 
   workerSummary: () => request<Record<string, number | string>>("/worker/summary"),
   workerAcceptances: () => request<WorkerAcceptance[]>("/worker/acceptances"),

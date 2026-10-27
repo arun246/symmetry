@@ -20,7 +20,7 @@ export function Login({ admin = false }: { admin?: boolean }) {
           <p className="login-sub">
             {admin
               ? "The admin console is an observability and configuration surface. It cannot act as a worker or publisher."
-              : "Choose a role to open its workspace. Each role has its own pages, navigation and data scope."}
+              : "Sign in as a worker to open your workspace, browse tasks and submit work."}
           </p>
 
           <div className="role-grid">
@@ -32,16 +32,6 @@ export function Login({ admin = false }: { admin?: boolean }) {
               >
                 <strong>Worker</strong>
                 <span>Browse contracts, sign the task document, track acceptances and submissions.</span>
-              </button>
-            )}
-            {!admin && (
-              <button
-                type="button"
-                className="role-card"
-                onClick={() => choose("publisher@symmetry.local", "/user/overview")}
-              >
-                <strong>Publisher</strong>
-                <span>Publish job cards, watch evaluations, read analytics and manage payouts.</span>
               </button>
             )}
             {admin && (
@@ -65,7 +55,7 @@ export function Login({ admin = false }: { admin?: boolean }) {
 
           <p className="small muted" style={{ marginTop: 14 }}>
             {admin ? (
-              <Link to="/user/login">Worker or publisher sign-in</Link>
+              <Link to="/user/login">Worker sign-in</Link>
             ) : (
               <Link to="/user/admin/login">Admin sign-in</Link>
             )}

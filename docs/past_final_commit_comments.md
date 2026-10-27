@@ -35,6 +35,962 @@ When a change is finished and accepted, add an entry **at the top** of
 
 ## Entries
 
+## 2026-10-27 — One licence for the whole repository: AGPL-3.0 (uncommitted)
+
+**What changed.** The Apache-2.0 / AGPL-3.0 split is gone. Every path — `runner/`,
+`wasm-sdk/`, `platform/`, `ai/`, `ui/`, `deploy/` and `docs/` — is now under the
+**GNU Affero General Public License v3.0**. `LICENSE-APACHE` is deleted,
+`LICENSE-AGPL` is renamed to `LICENSE`, the Cargo manifests declare
+`AGPL-3.0-only`, and every licensing table in the docs points at the one licence.
+ADR-0008 records the change and supersedes ADR-0002.
+
+**Why (decision).** The owner asked for one licence instead of a per-path split.
+The split was meant to lower adoption friction for the agent and SDK, but in
+practice it made contributors, package builders and publishers ask "which licence
+applies here?", and every new directory needed a fresh decision. While confirming
+the wording, the choice was made explicit: **AGPL-3.0, not plain GPL-3.0**. The
+platform is offered as a hosted service, and only AGPL's network clause forces a
+competitor who hosts a modified closed version to publish its changes; plain GPL
+would allow that. So the repository keeps the strongest copyleft the owner already
+relied on and simply drops the Apache exception. Rejected: keeping the split
+(two answers to one question), GPL-3.0 everywhere (no network protection),
+Apache-2.0 everywhere (gives away the control-plane protection), and MIT for the
+SDK (reintroduces a split). The private commercial layer — signing keys,
+holdouts, build infrastructure, hosted operations, trademarks, certifications and
+support/SLA — is unchanged and is not relicensed by this decision.
+
+**Files touched.**
+- `LICENSE:1` (renamed from `LICENSE-AGPL`; full AGPL-3.0 text).
+- `LICENSE-APACHE` (deleted).
+- `LICENSING.md:1` (rewritten: one licence, why AGPL, private layer, commercial use).
+- `docs/adr/0008-single-agpl-licence.md:1` (new ADR).
+- `docs/adr/0002-licensing.md:3` (status marked superseded), `:72` (links).
+- `docs/adr/README.md:14` (index row), `:20` (ADR-0008 row).
+- `README.md:126`, `AGENTS.md:35`, `CONTRIBUTING.md:3`, `docs/DESIGN.md:431`,
+  `docs/STACK.md:57` and `:274` (licensing statements).
+- `wasm-sdk/sdk/Cargo.toml:6`, `wasm-sdk/modules/image-resize/Cargo.toml:6`
+  (`license = "AGPL-3.0-only"`).
+
+**Code — modified files.**
+
+Before (`LICENSING.md`): a table that answered the licence question differently
+per path.
+
+```markdown
+| `runner/` | Apache-2.0 |
+| `wasm-sdk/` | Apache-2.0 |
+| `platform/` | AGPL-3.0 |
+| `ai/` | AGPL-3.0 |
+| `ui/` | AGPL-3.0 |
+| `deploy/` | AGPL-3.0 |
+```
+
+After (`LICENSING.md:1`): one sentence, one file, one licence.
+
+```markdown
+Symmetry is **one licence, not a split**: the whole repository — `platform/`,
+`ai/`, `ui/`, `wasm-sdk/`, `runner/`, `deploy/` and `docs/` — is under the
+**GNU Affero General Public License v3.0** (AGPL-3.0).
+```
+
+Before (`wasm-sdk/*/Cargo.toml`): the SDK advertised a permissive dual licence.
+
+```toml
+license = "MIT OR Apache-2.0"
+```
+
+After (`wasm-sdk/*/Cargo.toml:6`):
+
+```toml
+license = "AGPL-3.0-only"
+```
+
+**Verification.** `cd wasm-sdk && PATH="$HOME/.cargo/bin:$PATH" cargo build
+--release --target wasm32-unknown-unknown -p image-resize` accepts the new
+manifest field, and `cd ui && npm run build` still passes. No Java, Python or UI
+source changed, so the earlier `./mvnw -B verify` result stands. No file outside
+`LICENSE*`, the manifests and the docs was touched.
+
+**References.** `docs/adr/0008-single-agpl-licence.md`, `docs/adr/0002-licensing.md`
+(superseded), [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html).
+
+## 2026-10-26 — Navigation drawer closes when the page takes focus (uncommitted)
+
+**What changed.** The worker/publisher `Menu` drawer (and therefore the org and worker option panes, which
+share it) is now transient. It closes as soon as the user clicks into the page, tabs focus into the page,
+or navigates to another route. It is no longer restored from `localStorage` on reload, and if it closes
+while focus is still on a nav link, focus moves back to the `Menu` tab instead of staying inside a hidden
+pane.
+
+**Why (decision).** The drawer used to stay open until the user clicked its tab or pressed `Escape`, and it
+remembered "open" per role. After a reload, or after clicking a nav item, it sat over the page the user was
+trying to read. The owner asked for it to hide when it is not the thing being used. A flyout that dismisses
+on outside click is the standard behaviour and needs no extra chrome. Rejected: hover-open/hover-close
+(jumpy, and there is no hover on touch screens), a permanent pinned sidebar (takes width from tables and
+boards — the reason the overlay exists), and keeping the persisted open state (a reload would reopen it,
+which is the exact annoyance being fixed). The trade-off is one extra click per visit; predictability is
+worth more than remembering the last state. The workspace **Instructions** pane is deliberately unchanged:
+it is docked, so clicking in the editor must not close it or it would vanish while typing.
+
+**Files touched.**
+- `ui/src/components/OverlayPane.tsx:36` (pointerdown + focusin dismissal), `:57` (return focus to the tab),
+  `:68` (refs wired to the wrapper and aside).
+- `ui/src/components/Shell.tsx:93` (close on route change), `:135` (stop writing localStorage).
+- `docs/past_final_commit_comments.md` (this entry).
+
+**Code — modified files.**
+
+Before (`Shell.tsx`): the drawer was restored open per role and remembered every toggle.
+
+```tsx
+useEffect(() => {
+  const role = me.data?.role;
+  if (!role || role === "ADMIN") return;
+  setNavOpen(localStorage.getItem(`symmetry.nav.open.${role}`) === "true");
+}, [me.data?.role]);
+
+const updateNav = (open: boolean) => {
+  setNavOpen(open);
+  if (role !== "ADMIN") {
+    localStorage.setItem(`symmetry.nav.open.${role}`, String(open));
+  }
+};
+```
+
+After (`Shell.tsx:93`): every route starts with the drawer closed.
+
+```tsx
+useEffect(() => {
+  setNavOpen(false);
+}, [location.pathname]);
+
+const updateNav = (open: boolean) => {
+  setNavOpen(open);
+};
+```
+
+**Code — new behaviour in `OverlayPane.tsx:36`.**
+
+```tsx
+const onPointerDown = (event: PointerEvent) => {
+  if (panelRef.current?.contains(event.target as Node)) return;
+  onOpenChange(false);
+};
+const onFocusIn = (event: FocusEvent) => {
+  if (panelRef.current?.contains(event.target as Node)) return;
+  onOpenChange(false);
+};
+document.addEventListener("keydown", onKeyDown);
+document.addEventListener("pointerdown", onPointerDown);
+document.addEventListener("focusin", onFocusIn);
+```
+
+The wrapper `.edge-panel` has `pointer-events: none`, so only the aside and the `Menu` tab can be the event
+target; clicks anywhere else dismiss the drawer, and clicks inside it (including the tab's own toggle) do
+not.
+
+**Verification.** `cd ui && npm run build` passes (tsc + vite). Manual checks on the dev server: open
+`Menu`, click any page control → drawer closes; tab from the drawer into the page → closes; click a nav
+item → route opens with the drawer closed and focus on the `Menu` tab; `Escape` still closes only the newest
+edge pane; the workspace `Instructions` dock is unaffected.
+
+## 2026-10-25 — Workers can nullify a legacy contract acceptance (uncommitted)
+
+**What changed.** A worker who cannot finish a legacy contract can now **nullify** their own
+acceptance from the Legacy contracts list. A dialog asks for one or more reasons as checkboxes
+(`task-unclear`, `requirements-changed`, `cannot-test`, `not-enough-time`, `outside-skills`,
+`other`) plus an optional comment, which becomes **required** when `other` is ticked. After a
+successful call the contract disappears from that worker's list, the worker summary stops counting
+it as active, and "My acceptances" shows it as `withdrawn` with the time it happened.
+
+**Why (decision).** The signed `acceptance` row is proof of what the worker agreed to, so it must
+never be deleted. Deleting it would also erase the audit trail of a contract the publisher still
+sees. Instead the row moves `ACTIVE → WITHDRAWN` and keeps its hash, signature, public key and
+agreements untouched; hiding is a **per-worker view rule**, not a global state change, because one
+worker nullifying must not remove the task from anyone else or alter the contract lifecycle. The
+actor comes from the authenticated session (`actor.workerId()` = email), not from the request body,
+so a worker cannot nullify somebody else's row — the legacy `accept` endpoint's body `workerId`
+stays as-is, but it is deliberately not trusted for withdrawal. Withdrawal is final: the unique
+`(contract_id, worker_id)` constraint already blocks re-accepting, and a second `POST` returns
+`409`. Rejected alternatives: deleting the acceptance (loses the proof), a contract-wide
+`CANCELLED` state (publisher-side meaning, wrong granularity), and free-text-only reasons (cannot
+be counted or validated). The comment cap (2000 chars) and the reason allow-list are enforced
+server-side; the UI mirrors them but is not trusted.
+
+**Files touched.**
+- `platform/src/main/resources/db/migration/V6__acceptance_withdrawal.sql:1` (new: columns,
+  shape checks, index, comments).
+- `platform/src/main/java/io/symmetry/contract/WithdrawRequest.java:1` (new request record).
+- `platform/src/main/java/io/symmetry/contract/WithdrawalView.java:1` (new response record).
+- `platform/src/main/java/io/symmetry/contract/Acceptance.java:51` (status, reasons, comment,
+  withdrawn-at fields), `:119` (`isWithdrawn`), `:140` (`withdraw`).
+- `platform/src/main/java/io/symmetry/contract/AcceptanceRepository.java:15`
+  (`findByContractIdAndWorkerId`).
+- `platform/src/main/java/io/symmetry/contract/ContractService.java:35` (reason codes),
+  `:196` (`withdraw`), `:274` (`readStringArray`).
+- `platform/src/main/java/io/symmetry/contract/ContractController.java:112`
+  (`POST /contracts/{id}/withdraw`, audit + event).
+- `platform/src/main/java/io/symmetry/api/WorkerAcceptanceView.java:1` (adds `status`,
+  `withdrawnAt`).
+- `platform/src/main/java/io/symmetry/worker/WorkerController.java:40` (summary counts active
+  only, adds `withdrawn`), `:68` (view carries status).
+- `platform/src/test/java/io/symmetry/contract/ContractServiceTest.java:200` (six unit tests).
+- `platform/src/test/java/io/symmetry/contract/ContractApiIntegrationTest.java:234` (two API
+  tests).
+- `ui/src/api.ts:67` (`Withdrawal` type), `:367` (`withdrawContract`).
+- `ui/src/pages/Contracts.tsx:40` (worker acceptance map), `:68` (hide withdrawn rows),
+  `:104` (Nullify action), `:223` (dialog mount), `:239` (`WITHDRAWAL_REASONS`), `:248`
+  (`NullifyDialog`).
+- `ui/src/pages/Worker.tsx:48` (status column, nullified time).
+- `docs/DESIGN.md:276` (consent + withdrawal paragraph), `:509` (API row).
+- `docs/IMPLEMENTATION.md:197` (M1 behaviour note).
+- `docs/past_final_commit_comments.md` (this entry).
+
+**Code — new files.**
+
+`V6__acceptance_withdrawal.sql` keeps proof and adds the reason/comment shape:
+
+```sql
+ALTER TABLE acceptance ADD COLUMN status TEXT NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE acceptance ADD COLUMN withdrawal_reasons JSONB;
+ALTER TABLE acceptance ADD COLUMN withdrawal_comment TEXT;
+ALTER TABLE acceptance ADD COLUMN withdrawn_at TIMESTAMPTZ;
+
+ALTER TABLE acceptance ADD CONSTRAINT chk_acceptance_status
+    CHECK (status IN ('ACTIVE', 'WITHDRAWN'));
+
+-- Active rows carry no withdrawal data; withdrawn rows must carry all of it.
+ALTER TABLE acceptance ADD CONSTRAINT chk_acceptance_withdrawal_shape
+    CHECK (
+        (status = 'ACTIVE'
+            AND withdrawal_reasons IS NULL
+            AND withdrawal_comment IS NULL
+            AND withdrawn_at IS NULL)
+        OR
+        (status = 'WITHDRAWN'
+            AND withdrawal_reasons IS NOT NULL
+            AND jsonb_typeof(withdrawal_reasons) = 'array'
+            AND jsonb_array_length(withdrawal_reasons) > 0
+            AND withdrawn_at IS NOT NULL)
+    );
+```
+
+`ContractService.withdraw` (`:196`) validates the actor, the reason list and the `other` comment
+rule before mutating anything, then saves the row:
+
+```java
+public WithdrawalView withdraw(UUID contractId, WithdrawRequest request, Actor actor) {
+    if (actor == null || !actor.isWorker()) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Only a worker can nullify an acceptance");
+    }
+    Acceptance acceptance = acceptances.findByContractIdAndWorkerId(contractId, actor.workerId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "No acceptance of contract " + contractId + " for " + actor.workerId()));
+    if (acceptance.isWithdrawn()) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Acceptance is already nullified");
+    }
+    // ...trim/dedupe reasons, reject unknown codes, trim the comment,
+    // and require one when "other" is selected...
+    acceptance.withdraw(writeJson(reasons), comment);
+    Acceptance saved = acceptances.save(acceptance);
+    return new WithdrawalView(saved.getId(), contractId, saved.getStatus(),
+            readStringArray(saved.getWithdrawalReasons()), saved.getWithdrawalComment(),
+            saved.getWithdrawnAt());
+}
+```
+
+**Code — modified files.**
+
+Before (`WorkerController.java:43`): every acceptance counted as active work.
+
+```java
+summary.put("acceptances", mine.size());
+summary.put("verified", verified);
+```
+
+After (`WorkerController.java:44`): only non-withdrawn rows count, and the total is reported.
+
+```java
+long active = mine.stream().filter(acceptance -> !acceptance.isWithdrawn()).count();
+long verified = mine.stream()
+        .filter(acceptance -> acceptance.isVerified() && !acceptance.isWithdrawn())
+        .count();
+summary.put("acceptances", active);
+summary.put("withdrawn", mine.size() - active);
+summary.put("verified", verified);
+```
+
+Before (`Contracts.tsx:45`): the list showed every published contract.
+
+```tsx
+const rows = useMemo(() => {
+  const content = contracts.data?.content ?? [];
+  if (!publisher || !applied) return content;
+  const needle = applied.toLowerCase();
+  return content.filter((contract) => contract.moduleId.toLowerCase().includes(needle));
+}, [contracts.data, publisher, applied]);
+```
+
+After (`Contracts.tsx:62`): for a worker, a withdrawn acceptance hides the row; the same contract
+stays visible to everyone else.
+
+```tsx
+const visible = worker
+  ? content.filter((contract) => acceptanceByContract.get(contract.id)?.status !== "WITHDRAWN")
+  : content;
+if (!publisher || !applied) return visible;
+const needle = applied.toLowerCase();
+return visible.filter((contract) => contract.moduleId.toLowerCase().includes(needle));
+```
+
+**Verification.** `sg docker -c './mvnw -B verify'` (Testcontainers Postgres) passes with 63 tests
+and `cd ui && npm run build` passes. The new tests cover: successful withdrawal keeping the signed
+proof, no reason, unknown reason, `other` without a comment, double withdrawal (`409`), and
+another worker's contract (`404`); the API test accepts then withdraws, checks the row is still
+`verified` with the same hash, and checks a second withdrawal conflicts. A live run against the
+dev stack (publish, accept with a real Ed25519 key, withdraw, second withdraw `409`,
+`/worker/acceptances` showing `WITHDRAWN`) also passed after the restart applied V6.
+
+**Dev data.** The demo contract `module.demo.resize` (version 1.0.0, the only `contract` row) was
+deleted from the local Postgres in `symmetry-postgres`; its acceptance cascaded away. One fresh
+example, `module.demo.legacy` version 1.0.0, was then published and accepted by
+`worker@symmetry.local` so the Nullify button can be tried straight away; delete it with
+`delete from contract where module_id='module.demo.legacy'` (the acceptance cascades).
+
+**References.** `docs/DESIGN.md` (worker withdrawal), `docs/IMPLEMENTATION.md`, and the runner
+contract in `docs/STACK.md`.
+
+## 2026-10-25 — Chrome-style edge tabs and a docked instructions pane (uncommitted)
+
+**What changed.** The single edge tab is now a browser-tab shape rotated vertical: rounded on
+the outer edge, labelled `Menu` / `Instructions`, and merged into its pane while open. The
+workspace instructions moved from an overlay to a **docked** pane: opening it narrows the
+editor, closing it returns the full width. A small shared claim stack makes `Escape` close only
+the pane opened last. Below 900 px the docked pane falls back to a slide-in overlay.
+
+**Why (decision).** The previous slice gave the instructions a floating tab labelled `Click >`
+and an overlay that never let the editor grow. The owner asked for two things the overlay could
+not do: an obvious tab shape, and an editor that expands when the instructions are hidden. A
+docked pane is the only layout that returns width to the code, so the earlier "do not resize the
+editor" trade-off is **superseded**: code width while reading is less valuable than code width
+while writing, and the user can close the pane with one click. Rejected: keeping the overlay
+(the editor never grows), a multi-tab rail with one tab per page (most panes would be empty at
+this stage; the route already identifies the page), and making the tab reach the browser edge by
+removing the window frame (it would change every screen for one affordance).
+
+**Files touched.**
+- `ui/src/components/EdgeTab.tsx:1` (new: the rotated tab button, shared by both panes).
+- `ui/src/components/OverlayPane.tsx:1` (new: left navigation drawer; replaces `EdgePanel`).
+- `ui/src/components/DockPane.tsx:1` (new: docked workspace pane + 28 px tab rail).
+- `ui/src/components/edgePanes.ts:1` (new: Escape ownership stack).
+- `ui/src/components/EdgePanel.tsx` (deleted).
+- `ui/src/components/Shell.tsx:26` (import), `:208` (nav drawer, label `Menu`).
+- `ui/src/pages/Exercises.tsx:15` (import), `:1047` (`.workspace-split`), `:1099` (`DockPane`).
+- `ui/src/styles.css:220` (tab shape), `:267` (open-tab merge), `:282` (dock layout),
+  `:289` (docked surface), `:308` (rail), `:315` (dock tab), `:1346` (workspace split),
+  `:1504` (mobile fallback).
+- `docs/UI_LightWeight_mock.md:29` (decision D12), `:120` (navigation note).
+- `docs/past_final_commit_comments.md` (this entry).
+
+**Code — modified files.**
+
+Before (`Shell.tsx`): the drawer used one component with a generated `Click >` label.
+
+```tsx
+<EdgePanel side="left" label="navigation" open={navOpen} onOpenChange={updateNav}>
+  <nav className="sidebar" aria-label="Primary">{navigation}</nav>
+</EdgePanel>
+```
+
+After (`Shell.tsx:208`): the same drawer, now with a named tab.
+
+```tsx
+<OverlayPane label="Menu" open={navOpen} onOpenChange={updateNav}>
+  <nav className="sidebar" aria-label="Primary">{navigation}</nav>
+</OverlayPane>
+```
+
+Before (`Exercises.tsx`): the editor and the instructions were siblings, and the instructions
+were absolutely positioned over the page.
+
+```tsx
+<Card className="workspace-editor-card" title="Editor">...</Card>
+<EdgePanel side="right" label="instructions" tabText="Instructions" ...>
+  <div className="instructions-panel">...</div>
+</EdgePanel>
+```
+
+After (`Exercises.tsx:1047` and `:1099`): both live in a flex row, so closing the pane gives
+its width back to the editor.
+
+```tsx
+<div className="workspace-split">
+  <Card className="workspace-editor-card" title="Editor">...</Card>
+  <DockPane label="Instructions" open={instructionsOpen} onOpenChange={setInstructionsOpen}>
+    <div className="instructions-panel">...</div>
+  </DockPane>
+</div>
+```
+
+**Code — new files (key parts).**
+
+`EdgeTab.tsx:20` renders a chevron plus a vertical label and keeps the tab in the DOM while the
+pane is open, so there is always a visible close control:
+
+```tsx
+<button className={`edge-tab edge-tab-${side} edge-tab-${variant}${open ? " open" : ""}`}
+  aria-expanded={open} aria-controls={controls}
+  aria-label={`${open ? "Hide" : "Show"} ${label.toLowerCase()}`} onClick={onClick}>
+  <span className="edge-tab-chevron" aria-hidden="true">{chevron}</span>
+  <span className="edge-tab-text">{label}</span>
+</button>
+```
+
+`edgePanes.ts:8` keeps open panes in order because one document-level `Escape` listener per
+pane would otherwise close both at once, and releasing the newest pane must not leave the older
+one with no owner:
+
+```ts
+export function claimEdgePane(id: string) {
+  const existing = open.indexOf(id);
+  if (existing >= 0) open.splice(existing, 1);
+  open.push(id);
+}
+export function ownsEdgePane(id: string) {
+  return open.length > 0 && open[open.length - 1] === id;
+}
+```
+
+`styles.css:282` docks the pane by animating its width from `0` to
+`var(--edge-instructions-width)`, keeping the 28 px tab rail in the flex row so the tab never
+covers the editor's scrollbar. `styles.css:1504` turns the same element into an absolutely
+positioned overlay below 900 px, where a split would leave no usable editor.
+
+**Verification.** `npm run typecheck` and `npm run build` pass. A browser pass with Playwright
+against the running dev stack measured the editor at **1355 px closed → 916 px with the 440 px
+pane open → 1355 px closed again**; `Escape` closed only the instructions first and the drawer
+on the second press; the drawer state survived a reload; `aria-controls` targets resolve and a
+closed pane is `aria-hidden`. Screenshots at 1440 px (light and dark) and 375 px.
+`platform/` was not changed, so `./mvnw verify` was not rerun for this entry.
+
+## 2026-10-23 — Collapsible navigation, full-screen workspace and instructions drawer (uncommitted)
+
+**What changed.** Worker and Publisher navigation is now a collapsed overlay revealed by a
+vertical edge tab. The active page always uses the full content width; opening the pane
+covers content rather than shrinking it. The workspace page becomes full-bleed, the editor
+fills the available height, and task instructions move into a second right-edge overlay
+tab. Admin keeps the existing fixed sidebar, and publisher page content is unchanged.
+
+**Why (decision).** The fixed 234px sidebar took space from every publisher and worker screen,
+and the workspace’s two-column layout gave the editor only part of the page. A drawer keeps
+navigation available without permanently spending width. The workspace is the one place where
+horizontal space directly affects the main task, so it gets focus mode. Instructions were
+already in the workspace, but as a competing column; an overlay tab keeps them one click away
+while the editor stays full width and usable. Rejected: hiding navigation with no visible
+affordance (users get stranded), resizing the editor when instructions open (loses code
+width), a blocking scrim (you cannot code while reading instructions), and changing publisher
+tables/cards (not requested).
+
+**Files touched.**
+- `ui/src/components/EdgePanel.tsx:3` (new reusable tab + overlay, Escape/ARIA).
+- `ui/src/components/Shell.tsx:69` (remembered nav state), `:99` (focus mode), `:202` (overlay body), `:208` (nav EdgePanel).
+- `ui/src/pages/Exercises.tsx:1028` (full-height workspace), `:1096` (instructions EdgePanel).
+- `ui/src/styles.css:21` (edge variables), `:174` (overlay), `:230` (vertical tab), `:1296` (workspace layout), `:1403` (full-screen mode), `:1426` (mobile drawer).
+- `ui/src/api.ts:281` (dev default user is now worker).
+- `docs/past_final_commit_comments.md` (this entry).
+
+**Code — modified files.**
+
+Before (`Shell.tsx`): every non-admin page reserved 234px for a permanently visible sidebar.
+
+```tsx
+<div className="body">
+  <nav className="sidebar" aria-label="Primary">...</nav>
+  <main className="content"><Outlet /></main>
+</div>
+```
+
+After (`Shell.tsx:202`): the content gets the grid’s only column; the sidebar lives inside an
+`EdgePanel` and overlays it when opened. The choice is stored per role.
+
+```tsx
+<div className={`body${role === "ADMIN" ? "" : " body-nav-overlay"}`}>
+  <EdgePanel side="left" label="navigation" open={navOpen} onOpenChange={updateNav}>
+    <nav className="sidebar" aria-label="Primary">{navigation}</nav>
+  </EdgePanel>
+  <main className="content"><Outlet /></main>
+</div>
+```
+
+Before (`Exercises.tsx`): the workspace used a two-column grid with the task document and
+tests permanently beside the editor.
+
+```tsx
+<div className="workspace-grid">
+  <Card title="Editor">...</Card>
+  <div className="grid">
+    <Card title="Task document">...</Card>
+    <Card title="Public tests">...</Card>
+  </div>
+</div>
+```
+
+After (`Exercises.tsx:1028`): the editor fills the page, and instructions are a right-side
+overlay that does not resize it.
+
+```tsx
+<div className="workspace-page">
+  <PageHead ... />
+  <Card className="workspace-editor-card" title="Editor">...</Card>
+  <EdgePanel side="right" label="instructions" tabText="Instructions"
+    open={instructionsOpen} onOpenChange={setInstructionsOpen}>
+    <div className="instructions-panel">...</div>
+  </EdgePanel>
+</div>
+```
+
+Before (`api.ts`): a fresh dev session silently became a publisher.
+
+```ts
+export const DEFAULT_USER = "publisher@symmetry.local";
+```
+
+After (`api.ts:281`): it becomes a worker, matching the worker-only sign-in page.
+
+```ts
+export const DEFAULT_USER = "worker@symmetry.local";
+```
+
+**Code — new component.**
+
+`EdgePanel.tsx:3` provides the left nav tab and the right instructions tab. It is non-modal:
+`Escape` closes it, the tab stays available, and the panel is hidden from focus via
+`visibility: hidden` when closed. There is deliberately no scrim, so the editor and page
+remain usable while the instructions are open.
+
+```tsx
+<button className="edge-tab" aria-expanded={open} aria-controls={panelId}
+  onClick={() => onOpenChange(!open)}>
+  <span className="edge-tab-text">
+    {side === "left" ? `Click ${open ? "<" : ">"}` : (tabText ?? label)}
+  </span>
+</button>
+<aside id={panelId} className="edge-surface" aria-hidden={!open} tabIndex={-1}>
+  {children}
+</aside>
+```
+
+The workspace editor uses `flex: 1` and `min-height: 0`, so the textarea grows to the remaining
+viewport height. The full-screen mode removes the outer margin and window chrome via the
+`workspace-focus` body class.
+
+**Verification.** `npm run typecheck` and `npm run build` pass. Vite HMR reports no errors;
+the platform health endpoint is `UP`. A browser was not available on this host, so visual
+open/close behaviour still needs a manual pass in Chrome/Firefox.
+
+**References.** The Plan A entry below and `docs/past_final_commit_comments.md` entry
+“Remove the explanatory homepage paragraph and publisher sign-in”.
+
+## 2026-10-23 — Remove the explanatory homepage paragraph and publisher sign-in (uncommitted)
+
+**What changed.** The public task board no longer shows the sentence explaining
+that a publisher or accepted worker removes a function body and offers the task.
+The sign-in page now offers only the Worker role; the Publisher role card is gone,
+the subtitle is worker-specific, and the admin page links to “Worker sign-in”.
+
+**Why (decision).** The homepage is a worker-facing board, so the authoring
+explanation added noise and exposed internal publisher/subtask mechanics before a
+visitor had chosen a task. The publisher role was also removed from the public
+sign-in path to keep that page focused on workers. The publisher APIs and admin
+surface remain; only this entry point changed. Rejected: keeping a disabled
+publisher card (still confusing) or deleting publisher routes (they are needed for
+authoring and tests).
+
+**Files touched.**
+- `ui/src/pages/Exercises.tsx:140` (homepage hero).
+- `ui/src/pages/Login.tsx:23` (worker-only subtitle), `:26` (role grid), `:58` (admin link).
+
+**Code — modified files.**
+
+Before (`Exercises.tsx`): the hero carried the authoring explanation.
+
+```tsx
+<h1>Small, real tasks from real code.</h1>
+<p>
+  A publisher or an accepted worker picks a public GitHub file, removes one function
+  body, adds tests, and offers a task. You implement the missing body and submit it.
+</p>
+```
+
+After (`Exercises.tsx:140`): only the headline remains.
+
+```tsx
+<h1>Small, real tasks from real code.</h1>
+```
+
+Before (`Login.tsx`): the role grid rendered Worker and Publisher cards.
+
+```tsx
+{!admin && (
+  <button type="button" className="role-card"
+    onClick={() => choose("publisher@symmetry.local", "/user/overview")}>
+    <strong>Publisher</strong>
+    <span>Publish job cards, watch evaluations, read analytics and manage payouts.</span>
+  </button>
+)}
+```
+
+After: the Publisher card is removed; the page explains the worker flow.
+
+```tsx
+: "Sign in as a worker to open your workspace, browse tasks and submit work."}
+```
+
+**Verification.** `npm run build` passes.
+
+**References.** The Plan A entry below.
+
+## 2026-10-23 — Plan A UX, symbolic price tiers and worker subtasks (uncommitted)
+
+**What changed.** The Task board is now the primary worker path and never shows a
+money amount: complexity maps to a symbolic tier (`$`, `$$`, `$$$`, `$$$$`). An
+accepted worker can publish a **subtask** from the parent task; the subtask goes
+through the normal draft/import/stub/test/publish flow, then appears on the board
+with a `subtask` badge. The older contract registry now hides `DRAFT` records,
+requires an explicit `POST /contracts/{id}/publish` before acceptance/workbench,
+and is labelled **Legacy contracts** in the UI. The worker agreement card shows
+selection progress, and the old “Publish contract” dialog now publishes the new
+record immediately instead of leaving an invisible draft.
+
+**Why (decision).** Workers were landing on the contract registry, which has no
+editor, so the accept button led to a dead end. Money on the board was also a bad
+signal: the amount is not escrowed and is not paid in this slice. A complexity
+tier communicates rough size without implying a payment promise. Subtasks let the
+worker who accepted a task decompose it, while requiring that prior acceptance
+prevents drive-by task spam and keeps delegation tied to real work.
+
+Trade-offs accepted: a subtask is a normal exercise row (simple, reuses tests and
+UI) rather than a separate table; the parent link is one level and does not model
+a full work-breakdown tree; a subtask may use any public source, not necessarily
+the parent file. Rejected: showing money on the board (confusing, unpayable),
+letting any worker create top-level tasks (spam), auto-accepting subtasks (loses
+the signed document), and deleting the legacy contract registry (still needed for
+the runner track).
+
+**Files touched.**
+- `platform/src/main/resources/db/migration/V5__exercise_subtasks.sql:1` (parent column, self-FK, index, non-self check).
+- `platform/src/main/java/io/symmetry/exercise/Exercise.java:64` (parent field), `:161` (`isSubtask`).
+- `platform/src/main/java/io/symmetry/exercise/CreateSubtaskRequest.java:5` (request DTO).
+- `platform/src/main/java/io/symmetry/exercise/ExerciseService.java:103` (create subtask), `:250` (own-subtask accept guard), `:469` (subtask-author ownership), `:494` (tier in document), `:516` (`priceTier`).
+- `platform/src/main/java/io/symmetry/exercise/ExerciseController.java:95` (`POST /{id}/subtasks`), `:120-160` (worker authoring permissions).
+- `platform/src/main/java/io/symmetry/exercise/ExerciseView.java:19`, `ExerciseDetailView.java:23` (`parentExerciseId`, `createdBy`).
+- `platform/src/main/java/io/symmetry/contract/Contract.java:152` (`publish()`).
+- `platform/src/main/java/io/symmetry/contract/ContractService.java:98` (hide drafts), `:119` (publish), `:139` (workbench guard), `:151` (accept guard).
+- `platform/src/main/java/io/symmetry/contract/ContractController.java:83` (`POST /{id}/publish`).
+- `platform/src/main/java/io/symmetry/contract/ContractRepository.java:21` (draft-excluding queries).
+- `ui/src/pages/Exercises.tsx:45` (`priceTier`), `:95` (card tier), `:477` (detail tier), `:326` (subtask author controls), `:384-425` (agreement progress).
+- `ui/src/pages/Contracts.tsx:96` (legacy notice), `:200` (publish-on-create), `:328` (publish button), `:356` (Task board link).
+- `ui/src/api.ts:82,145` (parent id), `:352` (`publishContractRecord`), `:364` (`createSubtask`).
+- `ui/src/components/Shell.tsx:37` (“Legacy contracts”).
+- `ui/src/App.tsx:61` (worker task-creator route).
+- `ui/src/styles.css:1078` (`.price-tier`).
+- `platform/src/test/java/io/symmetry/exercise/ExerciseApiIntegrationTest.java:282` (subtask lifecycle).
+- `platform/src/test/java/io/symmetry/contract/ContractApiIntegrationTest.java:97` (`publishDraft`), `platform/src/test/java/io/symmetry/runner/RunnerApiIntegrationTest.java:173`, `platform/src/test/java/io/symmetry/e2e/AcceptanceJourneyE2ETest.java` (publish before accept).
+- `docs/DESIGN.md:283`, `docs/IMPLEMENTATION.md:182` (documented tiers/subtasks/legacy contracts).
+
+**Code — modified files.**
+
+Before (`ContractService.list`): every contract was public, including drafts that
+had never been offered to a worker.
+
+```java
+Page<Contract> page = (moduleId == null || moduleId.isBlank())
+        ? contracts.findAll(pageable)
+        : contracts.findByModuleId(moduleId, pageable);
+```
+
+After (`ContractService.java:98`): drafts are excluded; a publisher must publish
+first.
+
+```java
+Page<Contract> page = (moduleId == null || moduleId.isBlank())
+        ? contracts.findByLifecycleStateNot(io.symmetry.task.LifecycleState.DRAFT, pageable)
+        : contracts.findByModuleIdAndLifecycleStateNot(moduleId,
+                io.symmetry.task.LifecycleState.DRAFT, pageable);
+```
+
+Before (`ContractService.workbench`/`accept`): a draft could be opened and
+accepted even though no worker-facing publication step had happened.
+
+```java
+public WorkbenchView workbench(String moduleId, String version) {
+    Contract contract = contracts.findByModuleIdAndVersion(moduleId, version)
+            .orElseThrow(() -> notFound(moduleId, version));
+    return disclosure.workbench(toView(contract));
+}
+```
+
+After (`ContractService.java:139` and `:151`): both paths reject `DRAFT` with
+`409 Conflict`; only a publisher/admin can call `publish`.
+
+```java
+if (contract.getLifecycleState() == io.symmetry.task.LifecycleState.DRAFT) {
+    throw new ResponseStatusException(HttpStatus.CONFLICT,
+            "Contract is not published yet");
+}
+```
+
+Before (`Contracts.tsx` create dialog): the “Publish” button only created the
+record. With drafts hidden, that left an invisible draft and a button that lied.
+
+```tsx
+return api.publishContract({ moduleId, version, taskKind, language,
+  disclosureTier: tier, workKind, taskDocument, payload: parsed });
+```
+
+After (`Contracts.tsx:200`): create, then publish, so the label matches the result.
+
+```tsx
+const created = await api.publishContract({ moduleId, version, taskKind, language,
+  disclosureTier: tier, workKind, taskDocument, payload: parsed });
+return api.publishContractRecord(created.id);
+```
+
+**Code — new files (key parts).**
+
+`V5__exercise_subtasks.sql:1` adds a nullable parent with a self-reference and
+prevents a row from parenting itself:
+
+```sql
+ALTER TABLE exercise ADD COLUMN parent_exercise_id UUID
+    REFERENCES exercise(id) ON DELETE SET NULL;
+CREATE INDEX idx_exercise_parent ON exercise(parent_exercise_id);
+ALTER TABLE exercise ADD CONSTRAINT ck_exercise_parent_not_self
+    CHECK (parent_exercise_id IS NULL OR parent_exercise_id <> id);
+```
+
+`ExerciseService.createSubtask` (`:103`) requires the caller to be a worker, the
+parent to be published, and an active acceptance of the parent:
+
+```java
+requireWorker(actor);
+Exercise parent = exercises.findById(parentId).orElseThrow(() -> notFound(parentId));
+if (!parent.isPublished()) {
+    throw new ResponseStatusException(HttpStatus.CONFLICT, "Parent task is not published");
+}
+ExerciseAcceptance acceptance = acceptances.findByExerciseIdAndWorkerId(parentId, actor.workerId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Accept the parent task before publishing a subtask"));
+```
+
+`ExerciseService.priceTier` (`:516`) is the only mapping used by the board and the
+task document:
+
+```java
+public static String priceTier(String complexity) {
+    return switch (complexity == null ? "" : complexity.toUpperCase(Locale.ROOT)) {
+        case "MEDIUM" -> "$$";
+        case "HARD" -> "$$$";
+        case "EXPERT" -> "$$$$";
+        default -> "$";
+    };
+}
+```
+
+The task document now contains `Price tier: $$$` and `Parent task: <uuid>` and no
+`Offered price`/`USD` line (`ExerciseService.java:494-497`). A subtask author is
+treated as an owner only for their own subtask (`:469`), and cannot accept it
+(`:250`).
+
+**Verification.** `sg docker -c './mvnw -B verify'` passes **55 tests**. `npm run
+build` passes. Manual smoke test on the dev DB: published subtask
+`6b8ef03a-13ec-48d0-acb9-3c8adb6ec998` appears on `/exercises` with
+`parentExerciseId`; a publisher gets `403` on the subtask endpoint; the author
+gets `400` when accepting their own subtask.
+
+**References.** `docs/DESIGN.md` §5, `docs/IMPLEMENTATION.md` §3a, and the previous
+exercise-track entry below.
+
+## 2026-10-23 — Exercise authoring track, public task list and tests (uncommitted)
+
+**What changed.** Added the first end-to-end exercise track: a publisher creates a
+draft, imports a Java file from a public GitHub repository, removes a method body,
+adds public and hidden tests, and publishes a task. A worker signs the task
+document, opens a submit-only workspace, runs static checks and stores an attempt.
+The public task list is now the root page `/`. Added `V4__exercise_track.sql`,
+`io.symmetry.exercise`, JavaParser, UI pages, and 14 new tests (3 authoring unit
+classes, 1 Postgres lifecycle class). Full `./mvnw -B verify` passes: **54 tests**.
+
+**Why (decision).** The full `optimize` track depends on a KVM runner that does not
+exist on this host, and the user asked for a usable task-authoring flow now. We
+therefore built a separate bounded context that is honest about its limits:
+authoring + static checks only, no compile/execute/judge/deploy, no escrow or AI
+payment, and a display-only price. Private GitHub needs a GitHub App with scoped
+installation tokens; until then only public repositories are accepted, pinned to a
+commit SHA. Java is first because JavaParser gives safe structural edits; the
+`StubExtractor` interface leaves room for Python and Rust.
+
+Trade-offs accepted: submissions are records, not verdicts; source secrets are
+scanned heuristically, not proven absent; missing repository licences are warnings
+rather than blocks; the exercise context duplicates some acceptance concepts from
+the contract context. Rejected: putting exercises in the contract tables (mixes
+lifecycles), storing a personal GitHub token (long-lived secret), compiling in a
+plain process (violates ADR-0001), Java→WASM (wrong target, ADR-0005), and exposing
+hidden tests to every member of the publisher's organization (workers can share an
+org, so ownership is now role-aware).
+
+**Files touched.**
+- `platform/src/main/resources/db/migration/V4__exercise_track.sql:9` (`exercise`), `:65` (source), `:93` (stub), `:119` (tests), `:167` (acceptance), `:202` (submission), `:229` (workspace).
+- `platform/src/main/java/io/symmetry/exercise/ExerciseService.java:87` (create), `:167` (tests), `:218` (accept), `:248` (workspace), `:268` (submit), `:308` (detail), `:419` (ownership).
+- `platform/src/main/java/io/symmetry/exercise/JavaStubExtractor.java:33` (symbols), `:48` (body removal), `:109` (signature), `:123` (body helper).
+- `platform/src/main/java/io/symmetry/exercise/GitHubImportService.java:53` (import), `:122` (secret scan).
+- `platform/src/main/java/io/symmetry/exercise/StaticCheckService.java:26` (syntax + forbidden APIs).
+- `platform/src/main/java/io/symmetry/exercise/ExerciseController.java:52` (HTTP surface).
+- `platform/src/main/java/io/symmetry/exercise/PublicGitHubClient.java:22` (public GitHub REST client).
+- `platform/src/main/java/io/symmetry/contract/MessageSigner.java:46` (exercise canonical message).
+- `platform/src/main/java/io/symmetry/config/SecurityConfig.java:73` (public `GET /exercises*`).
+- `platform/src/main/resources/application.properties:31` (required exercise agreements).
+- `platform/pom.xml:51` (`javaparser-core:3.28.2`).
+- `ui/src/pages/Exercises.tsx:109` (public list), `:150` (publisher list), `:387` (detail), `:514` (creator), `:874` (workspace), `:1019` (submissions).
+- `ui/src/App.tsx:61` (root public list), `:68` (exercise routes).
+- `ui/src/api.ts:353` (exercise API methods).
+- `platform/src/test/java/io/symmetry/exercise/ExerciseApiIntegrationTest.java:114` (full lifecycle), `:220` (draft privacy/immutability), `:257` (signature/role rejection).
+- `platform/src/test/java/io/symmetry/exercise/JavaStubExtractorTest.java`, `GitHubRepoRefTest.java`, `StaticCheckServiceTest.java`.
+- `docs/adr/0007-exercise-authoring-track.md`, `docs/adr/README.md`, `docs/DESIGN.md`, `docs/STACK.md`, `docs/IMPLEMENTATION.md`, `docs/NEW-BUILDS.md`, `README.md`, `AGENTS.md`.
+
+**Code — modified files.**
+
+Before (`ExerciseService.canManage`): any actor in the publisher's organization
+could see hidden tests and original source. That included workers, because the dev
+seed puts publisher and worker in `acme`.
+
+```java
+return actor.isAdmin() || (actor.orgId() != null && actor.orgId().equals(exercise.getOrgId()));
+```
+
+After (`ExerciseService.java:419`): an owner must be an admin or a **publisher** in
+the organization. A worker in the same organization is not an owner.
+
+```java
+return actor.isAdmin() || (actor.isPublisher()
+        && actor.orgId() != null
+        && actor.orgId().equals(exercise.getOrgId()));
+```
+
+Before (`JavaStubExtractor`): the first implementation cast `MethodDeclaration` to
+`NodeWithBody`. JavaParser methods expose `Optional<BlockStmt>` instead, so listing
+symbols threw `ClassCastException` and extraction reported "no body". The
+signature also dropped parameter names.
+
+```java
+Range bodyRange = ((NodeWithBody<?>) declaration).getBody().getRange()...
+```
+
+After (`JavaStubExtractor.java:123`): use an explicit body helper for methods and
+constructors, include only symbols with bodies, and build a readable signature.
+
+```java
+private static BlockStmt bodyOf(BodyDeclaration<?> declaration) {
+    if (declaration instanceof MethodDeclaration method) {
+        return method.getBody().orElse(null);
+    }
+    if (declaration instanceof ConstructorDeclaration constructor) {
+        return constructor.getBody();
+    }
+    return null;
+}
+```
+
+Before (`SaveTestsRequest`): `@Valid` was on the `List` container, which Hibernate
+Validator 8 warns is deprecated.
+
+```java
+public record SaveTestsRequest(@Valid List<TestInput> tests,
+        @Valid List<SideCaseInput> sideCases) { }
+```
+
+After: validation sits on the type argument.
+
+```java
+public record SaveTestsRequest(List<@Valid TestInput> tests,
+        List<@Valid SideCaseInput> sideCases) { }
+```
+
+**Code — new files (key parts).**
+
+Acceptance binds the worker to the exact document (`ExerciseService.java:218`):
+
+```java
+String hash = MessageSigner.sha256(exercise.getTaskDocument());
+String message = MessageSigner.canonicalExerciseAcceptMessage(
+        exercise.getId(), exercise.getVersion(), hash);
+if (!MessageSigner.verify(request.publicKey(), request.signature(), message)) {
+    throw badRequest("Signature does not match the exercise document");
+}
+Instant now = Instant.now();
+ExerciseAcceptance acceptance = new ExerciseAcceptance(UUID.randomUUID(), exercise.getId(),
+        actor.workerId(), request.publicKey(), hash, request.signature(),
+        json(request.agreements()), true, now,
+        now.plus(exercise.getDeadlineDays(), ChronoUnit.DAYS));
+```
+
+The canonical text lives in `MessageSigner.java:46`:
+
+```java
+public static String canonicalExerciseAcceptMessage(UUID exerciseId, int version,
+        String taskDocumentHash) {
+    return "accept:exercise:" + exerciseId + ":" + version + ":" + taskDocumentHash;
+}
+```
+
+The workspace is explicit that execution is off (`ExerciseService.java:248`):
+
+```java
+return new WorkspaceView(detail(exercise, actor), session.getId(), acceptance.getId(),
+        acceptance.getStatus(), acceptance.getDeadlineAt(), false);
+```
+
+Submissions run only static checks and store the result (`ExerciseService.java:268`):
+
+```java
+StaticCheckResult result = staticChecks.check(exercise, request.content());
+String status = result.passed() ? "SUBMITTED" : "STATIC_FAILED";
+String findings = json(result.findings());
+```
+
+Hidden tests and source content are filtered by ownership (`ExerciseService.java:308`):
+
+```java
+List<ExerciseTest> exerciseTests = owner
+        ? tests.findByExerciseIdOrderByCreatedAtAsc(exercise.getId())
+        : tests.findByExerciseIdAndVisibilityOrderByCreatedAtAsc(exercise.getId(), "PUBLIC");
+SourceView sourceView = source == null ? null
+        : importer.view(source, owner, owner
+                ? importer.scanFindings(source.getOriginalContent()) : List.of());
+```
+
+`V4__exercise_track.sql:167` stores acceptance with one row per exercise/worker and a
+deadline; `:202` stores the attempt and static findings; `:229` stores the
+workspace expiry. The root route is `ui/src/App.tsx:61`:
+
+```tsx
+<Route path="/" element={<PublicTasksPage />} />
+```
+
+**Tests added.** The integration test uses a fake `GitHubClient` (no network) and a
+real Testcontainers Postgres. It covers create → import → symbols → stub → tests →
+publish → worker accept → workspace → static check → submit → publisher list. It
+also checks that a worker (same organization) cannot see hidden tests or source
+content, drafts are 404/publicly absent, published exercises are immutable, a bad
+signature is rejected, and a publisher cannot accept. Focused unit tests cover
+JavaParser body replacement, repository URL parsing and static checks.
+
+**References:** [ADR-0007](adr/0007-exercise-authoring-track.md),
+[DESIGN: exercise track](DESIGN.md#the-exercise-authoring-track),
+[IMPLEMENTATION: exercise track](IMPLEMENTATION.md#3a-exercise-track-implemented).
+
 ## 2026-10-22 — Phase 1 runner protocol and control plane (uncommitted)
 
 **What changed.** Added the control-plane side of the publisher-runner protocol:

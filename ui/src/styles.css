@@ -18,6 +18,10 @@
   --radius-window: 14px;
   --radius-card: 10px;
   --radius-control: 7px;
+  --edge-tab-width: 28px;
+  --edge-nav-width: 234px;
+  --edge-instructions-width: min(440px, 42vw);
+  --edge-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   color-scheme: light;
 }
 
@@ -149,6 +153,15 @@ textarea {
   display: grid;
   grid-template-columns: 234px 1fr;
   min-height: 0;
+  position: relative;
+}
+
+.body-nav-overlay {
+  grid-template-columns: 1fr;
+}
+
+.body-nav-overlay .content {
+  padding-left: 44px;
 }
 
 .sidebar {
@@ -156,6 +169,166 @@ textarea {
   border-right: 1px solid var(--line);
   padding: 12px 10px 20px;
   overflow-y: auto;
+}
+
+/* Edge panes: one Chrome-style vertical tab per section. The tab stays visible
+   while the pane is open, so there is always an obvious way to close it. */
+.edge-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.edge-surface {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  background: var(--sidebar);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 48px rgba(20, 30, 45, 0.22);
+  pointer-events: auto;
+  visibility: hidden;
+  transition: transform 0.24s var(--edge-ease), visibility 0s linear 0.24s;
+}
+
+.edge-panel.open .edge-surface {
+  visibility: visible;
+  transition: transform 0.24s var(--edge-ease), visibility 0s linear 0s;
+}
+
+.edge-panel-left .edge-surface {
+  left: 0;
+  width: var(--edge-nav-width);
+  padding: 12px 10px 20px;
+  overflow-y: auto;
+  transform: translateX(-100%);
+}
+
+.edge-panel-left.open .edge-surface {
+  transform: translateX(0);
+}
+
+.edge-panel-left .edge-surface .sidebar {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.edge-tab {
+  position: absolute;
+  top: 20px;
+  z-index: 3;
+  width: var(--edge-tab-width);
+  min-height: 72px;
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 2px 3px 12px rgba(20, 30, 45, 0.12);
+  transition: left 0.24s var(--edge-ease), right 0.24s var(--edge-ease),
+    background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.edge-tab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.edge-tab-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.edge-tab-chevron {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.edge-panel-left .edge-tab {
+  left: 0;
+  border-left: 0;
+  border-radius: 0 9px 9px 0;
+}
+
+/* Open: the tab rides the pane's edge and loses its seam, like a browser tab. */
+.edge-panel-left.open .edge-tab {
+  left: calc(var(--edge-nav-width) - 1px);
+  border-left: 1px solid var(--line);
+  border-right-color: transparent;
+  border-radius: 0;
+  background: var(--sidebar);
+  box-shadow: none;
+}
+
+.edge-panel-left.open .edge-tab:hover {
+  background: var(--sidebar);
+}
+
+/* Docked pane: workspace instructions. Opening it narrows the editor; closing it
+   gives the width back. Below 900px it becomes a slide-in overlay. */
+.dock-pane {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.dock-surface {
+  width: 0;
+  padding: 0;
+  overflow: hidden;
+  visibility: hidden;
+  background: var(--surface-2);
+  border-left: 1px solid transparent;
+  transition: width 0.24s var(--edge-ease), padding 0.24s var(--edge-ease),
+    border-color 0.24s var(--edge-ease), visibility 0s linear 0.24s;
+}
+
+.dock-pane.open .dock-surface {
+  width: var(--edge-instructions-width);
+  padding: 14px 14px 14px 16px;
+  visibility: visible;
+  border-left-color: var(--line);
+  transition-delay: 0s;
+}
+
+.dock-rail {
+  flex: 0 0 var(--edge-tab-width);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.edge-tab-dock {
+  position: relative;
+  top: 0;
+  right: auto;
+  border-right: 0;
+  border-radius: 0 9px 9px 0;
+  box-shadow: -2px 3px 12px rgba(20, 30, 45, 0.1);
+}
+
+.dock-pane.open .edge-tab-dock {
+  border-left-color: transparent;
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.dock-pane.open .edge-tab-dock:hover {
+  background: var(--surface-2);
 }
 
 .brand {
@@ -960,5 +1133,440 @@ table.table {
 
   .inline-form {
     grid-template-columns: 1fr;
+  }
+}
+
+.public-window {
+  grid-template-rows: 40px 1fr;
+}
+
+.public-content {
+  padding: 34px 40px 56px;
+}
+
+.board-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 0 28px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+
+.board-hero h1 {
+  margin: 4px 0 8px;
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.board-hero p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.board-hero-stat {
+  min-width: 110px;
+  text-align: right;
+}
+
+.board-hero-stat strong {
+  display: block;
+  font-size: 34px;
+  letter-spacing: -0.04em;
+}
+
+.board-hero-stat span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 180px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.task-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+
+.task-card h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.task-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-card-meta {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.task-card-meta strong {
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.price-tier {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.board-foot {
+  margin-top: 26px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.wizard {
+  display: grid;
+  gap: 14px;
+  max-width: 980px;
+}
+
+.source-summary {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+
+.symbol-list {
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.symbol-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.symbol-row:hover,
+.symbol-row.active {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
+
+.stub-preview {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 8px 10px;
+}
+
+.stub-preview summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.test-editor {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+}
+
+.test-list,
+.test-row {
+  display: grid;
+  gap: 8px;
+}
+
+.test-row + .test-row {
+  margin-top: 12px;
+}
+
+.workspace-page {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.workspace-split .workspace-editor-card {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workspace-page .page-head {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+  padding-right: 0;
+}
+
+.workspace-page .page-title {
+  font-size: 18px;
+}
+
+.workspace-page .page-sub {
+  margin: 0;
+}
+
+.workspace-editor-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-editor-card .card-head {
+  flex: 0 0 auto;
+}
+
+.code-editor {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  line-height: 1.5;
+  tab-size: 2;
+}
+
+.workspace-actions {
+  flex: 0 0 auto;
+  margin-top: 10px;
+}
+
+.workspace-editor-card .check-result {
+  flex: 0 0 auto;
+}
+
+.instructions-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.instructions-head {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.instructions-head h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.instructions-head p {
+  margin: 0;
+}
+
+.instructions-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding: 12px 2px 4px;
+}
+
+.instructions-scroll .card {
+  padding: 12px;
+}
+
+.check-result {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+}
+
+.check-result.pass {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+}
+
+.check-result.fail {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+body.workspace-focus {
+  overflow: hidden;
+}
+
+body.workspace-focus #root {
+  display: block;
+  padding: 0;
+}
+
+.window.workspace-focus {
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.window.workspace-focus .content {
+  overflow: hidden;
+  padding: 10px 12px 10px 44px;
+}
+
+@media (max-width: 900px) {
+  .public-content {
+    padding: 20px;
+  }
+
+  .board-hero {
+    display: block;
+  }
+
+  .board-hero-stat {
+    margin-top: 16px;
+    text-align: left;
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --edge-nav-width: min(280px, 86vw);
+    --edge-instructions-width: min(420px, 92vw);
+  }
+
+  /* No room to split: the instructions pane covers the editor again. The rail
+     stays put so the tab never moves away from the user's thumb. */
+  .workspace-split {
+    position: relative;
+  }
+
+  .dock-surface {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: var(--edge-tab-width);
+    z-index: 2;
+    width: min(420px, calc(92vw - var(--edge-tab-width)));
+    padding: 14px;
+    transform: translateX(calc(100% + var(--edge-tab-width)));
+    visibility: hidden;
+    box-shadow: 0 18px 48px rgba(20, 30, 45, 0.22);
+    transition: transform 0.24s var(--edge-ease), visibility 0s linear 0.24s;
+  }
+
+  .dock-pane.open .dock-surface {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
+
+  .body.body-nav-overlay {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  .body-nav-overlay .content {
+    padding: 12px 14px 16px 40px;
+  }
+
+  .body-nav-overlay .sidebar {
+    display: block;
+    overflow: visible;
+    border: 0;
+    padding: 0;
+  }
+
+  .body-nav-overlay .sidebar .brand {
+    display: flex;
+  }
+
+  .body-nav-overlay .sidebar .nav-label {
+    display: block;
+  }
+
+  .body-nav-overlay .sidebar .nav-group {
+    display: block;
+    margin-top: 14px;
+  }
+
+  .body-nav-overlay .sidebar .nav-item {
+    white-space: normal;
+  }
+
+  .window.workspace-focus .content {
+    padding: 8px 8px 8px 40px;
+  }
+
+  .workspace-page .page-head {
+    display: block;
+  }
+
+  .workspace-page .page-actions {
+    margin-top: 8px;
   }
 }

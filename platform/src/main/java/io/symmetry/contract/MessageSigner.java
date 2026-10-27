@@ -42,6 +42,11 @@ public final class MessageSigner {
         return "accept:" + moduleId + "@" + version + ":" + taskDocumentHash;
     }
 
+    /** The exact text a worker signs when accepting an exercise. */
+    public static String canonicalExerciseAcceptMessage(UUID exerciseId, int version, String taskDocumentHash) {
+        return "accept:exercise:" + exerciseId + ":" + version + ":" + taskDocumentHash;
+    }
+
     /**
      * The exact text a runner signs for a result. The payload hash is over the
      * exact JSON text the runner sent, so no canonical-JSON implementation is

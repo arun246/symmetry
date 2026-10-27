@@ -26,6 +26,7 @@ Related: `docs/STACK.md` (stack), `docs/DESIGN.md` (product),
 | D9 | **Charts:** donut (≤5 parts) + bar/line. No pie walls. | light weightui -quiet charts and honest data visualisation. |
 | D10 | **Config is data**, scoped `GLOBAL → ORG → CONTRACT → USER`, versioned and audited. | Per-task customisation without bespoke code paths. |
 | D11 | **Realtime = SSE** (one-way), polling fallback. | Simpler than WebSocket for dashboards; survives proxies. |
+| D12 | **One vertical edge tab per section.** Worker and publisher navigation lives in a left-edge drawer; the workspace instructions are a right-edge **docked** pane. Admin keeps a fixed sidebar. | A permanent 234 px sidebar spends width on every screen. The tab keeps navigation one click away and never disappears; the docked instructions pane gives the editor the full width when the pane is closed and narrows it while reading, which is what the owner asked for. The tab is styled like a browser tab rotated vertical (rounded outer edge, merges into the pane). |
 
 ---
 
@@ -115,6 +116,10 @@ Related: `docs/STACK.md` (stack), `docs/DESIGN.md` (product),
   (`@PreAuthorize`); route guards are UX only.
 
 ### 2.3 Navigation (cap 7 items)
+
+Navigation is a drawer opened from the left-edge `Menu` tab, not a fixed
+sidebar (D12). The active page still highlights in the drawer. Admin keeps the
+fixed sidebar because its pages are read-only monitoring, not dense work.
 
 - **Worker:** Overview · Browse contracts · My acceptances · Submissions · Earnings · Settings.
 - **Publisher:** Overview · Contracts · Workers · Evaluations · Analytics · Payments · Settings.

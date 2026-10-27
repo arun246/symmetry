@@ -149,6 +149,11 @@ public class Contract {
         this.createdBy = createdBy;
     }
 
+    /** Move a draft into the public registry so workers can accept it. */
+    public void publish() {
+        this.lifecycleState = LifecycleState.NEGOTIATED;
+    }
+
     /** Advance the lifecycle once a worker has accepted the task document. */
     public void markAccepted() {
         this.lifecycleState = LifecycleState.ACCEPTED;

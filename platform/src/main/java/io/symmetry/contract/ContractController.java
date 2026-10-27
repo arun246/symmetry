@@ -80,6 +80,19 @@ public class ContractController {
         return service.workbench(moduleId, version);
     }
 
+    @PostMapping("/{id}/publish")
+    @PreAuthorize("hasAnyRole('PUBLISHER','ADMIN')")
+    public ContractView publish(@PathVariable UUID id) {
+        Actor actor = currentUser.require();
+        ContractView view = service.publish(id, actor);
+        audit.record(actor, "contract.publish", "contract", id.toString(), null,
+                Map.of("moduleId", view.moduleId(), "version", view.version(),
+                        "lifecycleState", view.lifecycleState()));
+        events.publish(CHANNEL, "contract.published", Map.of(
+                "id", id.toString(), "moduleId", view.moduleId(), "version", view.version()));
+        return view;
+    }
+
     @PostMapping("/{id}/accept")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('WORKER')")
@@ -94,5 +107,20 @@ public class ContractController {
                 "acceptanceId", acceptance.getId().toString(),
                 "workerId", acceptance.getWorkerId()));
         return acceptance;
+    }
+
+    @PostMapping("/{id}/withdraw")
+    @PreAuthorize("hasRole('WORKER')")
+    public WithdrawalView withdraw(@PathVariable UUID id, @Valid @RequestBody WithdrawRequest request) {
+        Actor actor = currentUser.require();
+        WithdrawalView view = service.withdraw(id, request, actor);
+        audit.record(actor, "contract.withdraw", "contract", id.toString(), null,
+                Map.of("acceptanceId", view.acceptanceId().toString(),
+                        "reasons", view.reasons(),
+                        "comment", view.comment() == null ? "" : view.comment()));
+        events.publish(CHANNEL, "contract.withdrawn", Map.of(
+                "contractId", id.toString(),
+                "acceptanceId", view.acceptanceId().toString()));
+        return view;
     }
 }

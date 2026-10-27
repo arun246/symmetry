@@ -18,6 +18,11 @@ public interface ContractRepository extends JpaRepository<Contract, UUID> {
 
     Page<Contract> findByModuleId(String moduleId, Pageable pageable);
 
+    Page<Contract> findByLifecycleStateNot(io.symmetry.task.LifecycleState state, Pageable pageable);
+
+    Page<Contract> findByModuleIdAndLifecycleStateNot(String moduleId,
+            io.symmetry.task.LifecycleState state, Pageable pageable);
+
     Page<Contract> findByOrgId(UUID orgId, Pageable pageable);
 
     Optional<Contract> findByModuleIdAndVersion(String moduleId, String version);

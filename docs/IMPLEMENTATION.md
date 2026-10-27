@@ -168,6 +168,45 @@ step is recorded; a submission without an acceptance is refused.
 
 ---
 
+### 3a. Exercise track implemented
+
+The first user-facing slice is the **exercise** track: a publisher imports one
+public GitHub file, removes a Java method body, adds public and hidden tests, and
+publishes a task. A worker signs the task document, opens a workspace, runs a
+static check and submits a stored attempt.
+
+What exists:
+
+- `V4__exercise_track.sql` and `io.symmetry.exercise` (same application, separate
+  bounded context).
+- Public GitHub import pinned to a commit SHA, with secret/licence warnings.
+- Java stub extraction through `StubExtractor`; Python and Rust are later.
+- Public task list at `/`, publisher draft/import/test/publish screens, worker
+  detail/workspace/submissions screens.
+- Ed25519 acceptance, role-aware hidden-test filtering and static checks.
+- Symbolic `$`–`$$$$` price tiers on the public board (no money amounts).
+- Worker-authored subtasks: an accepted worker can create a draft subtask from
+  the parent, import/stub/test/publish it through the same flow, and see it on the
+  board with a `subtask` badge. A worker cannot accept their own subtask.
+- Tests: Java parser, repository URL parsing, static checks, subtasks and a
+  Postgres/Testcontainers lifecycle test.
+
+What does **not** exist: compilation, test execution, deployment, judging,
+escrow/payment and the GitHub App for private repositories. The older contract
+registry hides drafts and exposes `POST /contracts/{id}/publish` so a draft cannot
+be accepted before it is published; its UI is labelled **Legacy contracts**. A
+worker who cannot finish can nullify **their own** acceptance through
+`POST /contracts/{id}/withdraw` (reason checkboxes plus an optional comment,
+required for `other`): the row stays in the table as `WITHDRAWN` for audit and is
+hidden from that worker's list, while the contract remains published for others.
+`WorkspaceView` reports `executionEnabled=false`; the price is display-only. The KVM runner in
+M3 remains the boundary for any future execution.
+
+**Done when:** a publisher can publish a task and a worker can submit an attempt
+without seeing hidden tests or original source. *This is now true.*
+
+---
+
 ## 3. M1b — Deciding what may be published, and the worker's rules
 
 Not every module is safe to publish. Because workers are outside people sending in

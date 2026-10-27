@@ -27,6 +27,12 @@ Symmetry handles two `task_kind`s. The job card says which one it is.
 The **first version** of Symmetry only does `optimize`. `build` is a later stage
 (see the roadmap), but we design for it now so the center is not rigid.
 
+There is also a small **exercise authoring** track for practice-sized tasks:
+import a public Java file, remove a method body, add public and hidden tests, and
+publish it. It stores submissions and runs static checks only — it does not
+execute, judge or pay. It is a separate bounded context, not a `build` proposal or
+milestone flow; see [`adr/0007-exercise-authoring-track.md`](adr/0007-exercise-authoring-track.md).
+
 ---
 
 ## 2. Languages are not limited to Java, Rust and Python

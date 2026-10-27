@@ -1,27 +1,37 @@
-# Licensing map
+# Licence
 
-Symmetry uses a **split licence**. The goal is a Red Hat-style model: open-source
-software, published updates, community access, and a paid supported product.
+Symmetry is **one licence, not a split**: the whole repository — `platform/`,
+`ai/`, `ui/`, `wasm-sdk/`, `runner/`, `deploy/` and `docs/` — is under the
+**GNU Affero General Public License v3.0** (AGPL-3.0).
+
+The full text is in [LICENSE](LICENSE).
 
 This file is a map, not legal advice. Review it before publishing binaries or
 signing keys.
 
-## Code
+## Why AGPL-3.0
 
-| Path | Licence | Why |
-|---|---|---|
-| `runner/` | [Apache-2.0](LICENSE-APACHE) | The publisher appliance and agent should be easy to inspect, package and integrate. |
-| `wasm-sdk/` | [Apache-2.0](LICENSE-APACHE) | The module SDK should have the lowest possible adoption friction. |
-| `platform/` | [AGPL-3.0](LICENSE-AGPL) | A hosted competitor must share modifications to the control plane. |
-| `ai/` | [AGPL-3.0](LICENSE-AGPL) | The adjudication service is part of the server-side decision path. |
-| `ui/` | [AGPL-3.0](LICENSE-AGPL) | The console ships with the server and is not a separate reusable library. |
-| `deploy/` | [AGPL-3.0](LICENSE-AGPL) | The reference deployment stays aligned with the server. |
-| `docs/` | Not decided | Do not add a blanket licence until the owner chooses one. |
+The goal is a Red Hat-style model: open-source software, published updates,
+community access, and a paid supported product.
+
+AGPL-3.0 keeps the software fully open while closing the network loophole: if
+someone offers a modified Symmetry to users over a network, they must offer the
+corresponding source. That is the protection the hosted control plane and the
+adjudication service depend on. One licence for every path also removes the
+"which licence is this file under?" question for publishers, contributors and
+package builders.
+
+Code in this repository is **not** MIT, Apache-2.0, dual-licensed or
+source-available. Earlier revisions used a split (Apache-2.0 for the agent and
+SDK); [ADR-0008](docs/adr/0008-single-agpl-licence.md) supersedes
+[ADR-0002](docs/adr/0002-licensing.md).
 
 Third-party dependencies keep their own licences. The SBOM and dependency scan
 are the authority for those; this file does not relicense them.
 
 ## What stays private
+
+The licence covers code, not the commercial layer:
 
 - release signing keys and key custody
 - holdout tests, oracles and hidden data
@@ -48,5 +58,5 @@ RHEL-compatible ABI without those constraints.
 
 ## Contributions
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions to a path are accepted under
-that path's licence, with a Developer Certificate of Origin sign-off.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions are accepted under
+AGPL-3.0, with a Developer Certificate of Origin sign-off.

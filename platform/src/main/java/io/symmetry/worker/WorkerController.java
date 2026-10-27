@@ -38,9 +38,13 @@ public class WorkerController {
     public Map<String, Object> summary() {
         Actor actor = currentUser.require();
         List<Acceptance> mine = acceptances.findByWorkerIdOrderByAcceptedAtDesc(actor.workerId());
-        long verified = mine.stream().filter(Acceptance::isVerified).count();
+        long active = mine.stream().filter(acceptance -> !acceptance.isWithdrawn()).count();
+        long verified = mine.stream()
+                .filter(acceptance -> acceptance.isVerified() && !acceptance.isWithdrawn())
+                .count();
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("acceptances", mine.size());
+        summary.put("acceptances", active);
+        summary.put("withdrawn", mine.size() - active);
         summary.put("verified", verified);
         summary.put("pendingSubmissions", 0);
         summary.put("earningsPendingCents", 0);
@@ -61,7 +65,7 @@ public class WorkerController {
                     contract.getModuleId(), contract.getVersion(),
                     contract.getLifecycleState().name().toLowerCase(),
                     acceptance.getTaskDocumentHash(), acceptance.isVerified(),
-                    acceptance.getAcceptedAt()));
+                    acceptance.getAcceptedAt(), acceptance.getStatus(), acceptance.getWithdrawnAt()));
         }
         return views;
     }

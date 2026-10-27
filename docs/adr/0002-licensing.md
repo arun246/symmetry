@@ -1,6 +1,6 @@
 # ADR-0002: Apache agent, AGPL server, commercial support
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0008](0008-single-agpl-licence.md)
 - **Date:** 2026-10-22
 - **Related:** [ADR-0001](0001-runner-isolation.md), [ADR-0006](0006-cloud-appliance.md)
 
@@ -71,6 +71,5 @@ corporate CLA or a commercial exception to AGPL is a separate written agreement.
 ## References
 
 - [Licensing map](../../LICENSING.md)
-- [Apache-2.0](../../LICENSE-APACHE)
-- [AGPL-3.0](../../LICENSE-AGPL)
+- [Current licence](../../LICENSE) (AGPL-3.0; supersedes this ADR)
 - [Contributing](../../CONTRIBUTING.md)

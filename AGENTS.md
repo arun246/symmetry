@@ -17,8 +17,8 @@
 Decisions are repeated across these docs. When you change one, reconcile the others.
 
 ## Host toolchain
-- Available: **Java 21** (`javac`), **Node 20 + npm**, **Python 3.13 + pip**, **Docker** (installed; the daemon may be off), **curl/unzip**.
-- Absent: **Maven, Gradle, Rust/cargo**, and **no GPU**. Any Java build needs a committed wrapper (`./mvnw`) or Docker; do not assume `mvn` or `cargo` exist. Spring projects can be generated via `https://start.spring.io` (reachable).
+- Available: **Java 21** (`javac`), **Node 20 + npm**, **Python 3.13 + pip**, **Docker** (installed; the daemon may be off), **curl/unzip**, and **Rust 1.99** via `~/.cargo/bin` (not always on `PATH` in non-login shells; prefix `PATH="$HOME/.cargo/bin:$PATH"`).
+- Absent: **Maven and Gradle** (use the committed `./mvnw`), and **no GPU**. Spring projects can be generated via `https://start.spring.io` (reachable).
 
 ## Load-bearing decisions (easy to get wrong)
 - **Stack (see `docs/STACK.md`):** Java 21 + Spring Boot REST API (`platform/`), React + **custom Harbor design system** UI (`ui/`), Python FastAPI AI service (`ai/`), **AlmaLinux + KVM runner appliance** (`runner/`, planned), Rust→WASM modules (`wasm-sdk/`), **PostgreSQL** (not MySQL), MinIO + Redis.
@@ -32,9 +32,10 @@ Decisions are repeated across these docs. When you change one, reconcile the oth
 - **Correctness is a gate**; resource metrics only rank submissions that already pass. Results are signed by the runner and verified by the control plane.
 - **AI payment is final on the first decision**, with escrow, one evidence-based human appeal, a pinned model version and a liability cap. See `docs/adr/0003-ai-adjudication.md`.
 - **Updates are signed** (TUF-style, anti-rollback) and available online plus as offline bundles. Open-source code does not authenticate a binary.
-- **Licensing is split:** Apache-2.0 for `runner/` + `wasm-sdk/`; AGPL-3.0 for `platform/` + `ai/` + `ui/` + `deploy/`; commercial support/updates. See `LICENSING.md`.
+- **Licensing is one licence:** AGPL-3.0 for every path (`runner/`, `wasm-sdk/`, `platform/`, `ai/`, `ui/`, `deploy/`, `docs/`); commercial support/updates. See `LICENSING.md` and `docs/adr/0008-single-agpl-licence.md`.
 - V1 ships **one workload cell (compute kernels)**, but core interfaces must stay cell-agnostic; do not hardcode the V1 cell. Future kinds of work are decided when needed.
 - A submission is ineligible without a **signed acceptance of the task document** and the M1b agreements.
+- **Exercise authoring is a separate bounded context** (`io.symmetry.exercise`, `exercise*` tables): public GitHub only until a GitHub App exists, Java first, signed acceptance enforced, static checks only. It must **not** compile, execute, judge or pay for code yet; the public task list is `/`. See `docs/adr/0007-exercise-authoring-track.md`.
 
 ## Build gotchas (easy to get wrong)
 - **Spring Boot 4, not 3.** `platform/` is Spring Boot 4.1.1 → Spring Framework 7
@@ -48,8 +49,8 @@ Decisions are repeated across these docs. When you change one, reconcile the oth
   - `platform/`: `./mvnw -B verify` (the Testcontainers test needs Docker; it is
     skipped automatically when Docker is absent, so pure unit tests still run).
   - `ui/`: `npm ci && npm run build`.
-  - `ai/`: `python -c "import app.main"`.
-  - `wasm-sdk/`: `cargo build --release --target wasm32-unknown-unknown` (needs Rust).
+  - `ai/`: `python3 -c "import app.main"` (install `requirements.txt` first; this host may not have FastAPI installed).
+  - `wasm-sdk/`: `PATH="$HOME/.cargo/bin:$PATH" cargo build --release --target wasm32-unknown-unknown -p image-resize` (needs the `wasm32-unknown-unknown` target; installed 2026-10-23).
   - `runner/`: not built yet; add a verify command with the first code and record
     it here before claiming anything is verified.
 

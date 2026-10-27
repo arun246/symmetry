@@ -54,8 +54,9 @@ owns the software, updates and support. See
   offline bundles.
 - **AI-final payment with escrow and one appeal**: see
   [ADR-0003](adr/0003-ai-adjudication.md).
-- **Split licensing**: Apache-2.0 for the agent/SDK, AGPL-3.0 for the server. See
-  [LICENSING.md](../LICENSING.md).
+- **One licence**: AGPL-3.0 for the whole repository (agent, SDK, server, AI, UI,
+  deploy, docs). See [LICENSING.md](../LICENSING.md) and
+  [ADR-0008](adr/0008-single-agpl-licence.md).
 
 ---
 
@@ -93,6 +94,7 @@ symmetry/
 | DB driver | **PostgreSQL JDBC** | Talks to Postgres. |
 | WASM sandbox | **Chicory** (`runtime`, `wasm`, `wasi`) | Runs untrusted WASM inside the Java program, with fuel and memory limits. |
 | JSON + validation | **Jackson** + a **contract document validator** | Reads contracts; checks the required sections, that limits are positive, and that invariants are not empty. (Spring Boot 4 ships **Jackson 3**, whose packages are `tools.jackson.*` — not `com.fasterxml.jackson.*`. A networknt JSON Schema pass is planned.) |
+| Java source parsing | **JavaParser** (`javaparser-core`) | Lists methods/constructors and replaces a selected body for the exercise authoring track. |
 | Security | **Spring Security OAuth2 Resource Server** + **Keycloak** | Login and permissions; one open-source identity server for everyone. The resource server is wired but **off by default** for local dev (`symmetry.security.enabled=false`); turn it on with a Keycloak issuer to require a JWT. |
 | Rate limiting | **Bucket4j** | Stops abuse per company/worker. |
 | Cache | **Caffeine** | Fast repeated reads (hot contracts). |
@@ -251,10 +253,15 @@ Built so far (details and "done when" tests in `docs/IMPLEMENTATION.md`):
 5. `ai/`: FastAPI stub with `/health` and one gateway passthrough (audit-logged).
 6. `wasm-sdk/`: the ABI crate + one `image-resize` example.
 7. CI: `./mvnw verify` (Testcontainers Postgres) + `npm run build` + `cargo build`.
+8. Exercise authoring track: public-GitHub import, Java stub extraction,
+   public/hidden tests, Ed25519 acceptance, submit-only workspace and static
+   checks. The public task list is the root page (`/`). It does **not** compile or
+   execute code, and the price is display-only.
 
 **Not built yet:** the runner appliance, the KVM microVM launcher, the neutral
-evaluator, signed OTA and the AI payment flow. The runner verify command will be
-added with the first `runner/` code; do not claim it is verified before then.
+evaluator, exercise execution/judging, signed OTA and the AI payment flow. The
+runner verify command will be added with the first `runner/` code; do not claim it
+is verified before then.
 
 Core interfaces are cell-agnostic (work kind, lifecycle, toolchain registry,
 keycard, checker list, flexible metrics); V1 fills only the compute cell. Next:
@@ -264,17 +271,16 @@ deepen M1b → M2 → M3, then the runner appliance, then the `build` track.
 
 ## 8. Licensing and commercial model
 
-The project uses a **split licence**, not a RHEL licence:
+The project uses **one licence, AGPL-3.0**, for every path — not a split and not
+a RHEL licence:
 
 | Path | Licence |
 |---|---|
-| `runner/`, `wasm-sdk/` | Apache-2.0 |
-| `platform/`, `ai/`, `ui/`, `deploy/` | AGPL-3.0 |
-| `docs/` | Not decided |
+| all (`runner/`, `wasm-sdk/`, `platform/`, `ai/`, `ui/`, `deploy/`, `docs/`) | AGPL-3.0 |
 
 The commercial layer is support, signed updates, certifications, signing keys and
 holdouts. The appliance base is AlmaLinux 9, not a redistributed RHEL qcow2. See
-[LICENSING.md](../LICENSING.md), [ADR-0002](adr/0002-licensing.md) and
+[LICENSING.md](../LICENSING.md), [ADR-0008](adr/0008-single-agpl-licence.md) and
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ---
@@ -287,6 +293,7 @@ holdouts. The appliance base is AlmaLinux 9, not a redistributed RHEL qcow2. See
   model; the interface allows either.
 - Which escrow provider, liability cap and appeal window apply.
 - Which AWS/GCP instance types are certified for nested virtualisation.
+- When to register a GitHub App for private exercise sources (public repositories work now).
 - Whether to add native Rust alongside the `wasm32` tier.
 - Whether to keep jOOQ alongside JPA from day one, or add it only when reporting
   queries appear.

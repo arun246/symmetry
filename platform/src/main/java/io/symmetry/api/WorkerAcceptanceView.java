@@ -12,5 +12,7 @@ public record WorkerAcceptanceView(
         String lifecycleState,
         String taskDocumentHash,
         boolean verified,
-        Instant acceptedAt) {
+        Instant acceptedAt,
+        String status,
+        Instant withdrawnAt) {
 }

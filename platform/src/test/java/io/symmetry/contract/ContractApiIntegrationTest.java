@@ -94,18 +94,33 @@ class ContractApiIntegrationTest {
                 .getContentAsString();
     }
 
+    private void publishDraft(String createdJson) throws Exception {
+        String id = mapper.readTree(createdJson).get("id").asText();
+        mockMvc.perform(post("/contracts/{id}/publish", id)
+                        .header("X-Symmetry-User", "publisher@symmetry.local"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lifecycleState").value("negotiated"));
+    }
+
     @Test
     void publishesAndFetchesAContract() throws Exception {
         String moduleId = "module.image.resize.it.publish";
 
-        mockMvc.perform(post("/contracts")
+        String created = mockMvc.perform(post("/contracts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(contractBody(moduleId, "1.0.0", "L1", "compute", false)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.moduleId").value(moduleId))
                 .andExpect(jsonPath("$.language").value("java"))
                 .andExpect(jsonPath("$.workKind").value("compute"))
-                .andExpect(jsonPath("$.lifecycleState").value("draft"));
+                .andExpect(jsonPath("$.lifecycleState").value("draft"))
+                .andReturn().getResponse().getContentAsString();
+
+        mockMvc.perform(get("/contracts").param("moduleId", moduleId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        publishDraft(created);
 
         mockMvc.perform(get("/contracts/{moduleId}/{version}", moduleId, "1.0.0"))
                 .andExpect(status().isOk())
@@ -121,7 +136,7 @@ class ContractApiIntegrationTest {
     @Test
     void workbenchHidesSecretsAccordingToTier() throws Exception {
         String l2 = "module.image.resize.it.l2";
-        publish(l2, "1.0.0", "L2");
+        publishDraft(publish(l2, "1.0.0", "L2"));
 
         mockMvc.perform(get("/contracts/{moduleId}/{version}/workbench", l2, "1.0.0"))
                 .andExpect(status().isOk())
@@ -131,7 +146,7 @@ class ContractApiIntegrationTest {
                 .andExpect(jsonPath("$.payload.realExamples").exists());
 
         String l0 = "module.image.resize.it.l0";
-        publish(l0, "1.0.0", "L0");
+        publishDraft(publish(l0, "1.0.0", "L0"));
 
         mockMvc.perform(get("/contracts/{moduleId}/{version}/workbench", l0, "1.0.0"))
                 .andExpect(status().isOk())
@@ -181,7 +196,9 @@ class ContractApiIntegrationTest {
     void acceptIsVerifiedAndAdvancesLifecycle() throws Exception {
         String moduleId = "module.image.resize.it.accept";
         String version = "1.0.0";
-        JsonNode created = mapper.readTree(publish(moduleId, version, "L1"));
+        String createdJson = publish(moduleId, version, "L1");
+        publishDraft(createdJson);
+        JsonNode created = mapper.readTree(createdJson);
         String id = created.get("id").asText();
 
         KeyPair keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -211,5 +228,114 @@ class ContractApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertThat(mapper.readTree(lifecycle).get("lifecycleState").asText()).isEqualTo("accepted");
+    }
+
+    /** Accepts a published contract as the given worker id, signing on the fly. */
+    private void accept(String id, String moduleId, String version, String workerId) throws Exception {
+        KeyPair keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        String hash = MessageSigner.sha256(taskDocument(moduleId));
+        String message = MessageSigner.canonicalAcceptMessage(moduleId, version, hash);
+        Signature signer = Signature.getInstance("Ed25519");
+        signer.initSign(keyPair.getPrivate());
+        signer.update(message.getBytes(StandardCharsets.UTF_8));
+
+        Map<String, Object> accept = new LinkedHashMap<>();
+        accept.put("workerId", workerId);
+        accept.put("agreements", List.of("honesty", "scope", "ai-declaration",
+                "confidentiality", "responsibility", "license"));
+        accept.put("publicKey", Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded()));
+        accept.put("signature", Base64.getEncoder().encodeToString(signer.sign()));
+
+        mockMvc.perform(post("/contracts/{id}/accept", id)
+                        .header("X-Symmetry-User", workerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(accept)))
+                .andExpect(status().isCreated());
+    }
+
+    private JsonNode workerAcceptance(String contractId, String workerId) throws Exception {
+        String body = mockMvc.perform(get("/worker/acceptances")
+                        .header("X-Symmetry-User", workerId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        for (JsonNode item : mapper.readTree(body)) {
+            if (contractId.equals(item.get("contractId").asText())) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void workerNullifiesAnAcceptanceAndItStaysOnRecord() throws Exception {
+        String workerId = "worker@symmetry.local";
+        String moduleId = "module.image.resize.it.withdraw";
+        String version = "1.0.0";
+        String createdJson = publish(moduleId, version, "L1");
+        publishDraft(createdJson);
+        String id = mapper.readTree(createdJson).get("id").asText();
+        accept(id, moduleId, version, workerId);
+
+        Map<String, Object> withdraw = new LinkedHashMap<>();
+        withdraw.put("reasons", List.of("task-unclear", "other"));
+        withdraw.put("comment", "No reference suite, so I cannot tell when it passes.");
+
+        mockMvc.perform(post("/contracts/{id}/withdraw", id)
+                        .header("X-Symmetry-User", workerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(withdraw)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("WITHDRAWN"))
+                .andExpect(jsonPath("$.reasons[0]").value("task-unclear"))
+                .andExpect(jsonPath("$.reasons[1]").value("other"))
+                .andExpect(jsonPath("$.comment").value(withdraw.get("comment")))
+                .andExpect(jsonPath("$.withdrawnAt").exists());
+
+        // The row survives so the signed acceptance stays auditable.
+        JsonNode acceptance = workerAcceptance(id, workerId);
+        assertThat(acceptance).isNotNull();
+        assertThat(acceptance.get("status").asText()).isEqualTo("WITHDRAWN");
+        assertThat(acceptance.get("withdrawnAt").isNull()).isFalse();
+        assertThat(acceptance.get("verified").asBoolean()).isTrue();
+        assertThat(acceptance.get("taskDocumentHash").asText())
+                .isEqualTo(MessageSigner.sha256(taskDocument(moduleId)));
+
+        // Nullifying twice is a conflict, not a silent success.
+        mockMvc.perform(post("/contracts/{id}/withdraw", id)
+                        .header("X-Symmetry-User", workerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(withdraw)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void withdrawRejectsMissingReasonAndOtherWithoutComment() throws Exception {
+        String workerId = "worker@symmetry.local";
+        String moduleId = "module.image.resize.it.withdraw.invalid";
+        String version = "1.0.0";
+        String createdJson = publish(moduleId, version, "L1");
+        publishDraft(createdJson);
+        String id = mapper.readTree(createdJson).get("id").asText();
+        accept(id, moduleId, version, workerId);
+
+        mockMvc.perform(post("/contracts/{id}/withdraw", id)
+                        .header("X-Symmetry-User", workerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reasons\":[],\"comment\":\"\"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/contracts/{id}/withdraw", id)
+                        .header("X-Symmetry-User", workerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reasons\":[\"other\"],\"comment\":\"  \"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/contracts/{id}/withdraw", id)
+                        .header("X-Symmetry-User", workerId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reasons\":[\"bored\"],\"comment\":\"\"}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(workerAcceptance(id, workerId).get("status").asText()).isEqualTo("ACTIVE");
     }
 }

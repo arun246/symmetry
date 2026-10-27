@@ -2,15 +2,11 @@
 
 ## Licence of contributions
 
-Symmetry uses a split licence. By contributing, you agree that your contribution
-is licensed under the licence of the path you changed:
+Symmetry uses **one licence: AGPL-3.0**, for every path. By contributing, you
+agree that your contribution is licensed under AGPL-3.0.
 
-| Path | Licence |
-|---|---|
-| `runner/`, `wasm-sdk/` | Apache-2.0 |
-| `platform/`, `ai/`, `ui/`, `deploy/` | AGPL-3.0 |
-
-See [LICENSING.md](LICENSING.md) for the full map.
+See [LICENSING.md](LICENSING.md) and
+[ADR-0008](docs/adr/0008-single-agpl-licence.md) for the decision.
 
 ## Developer Certificate of Origin
 

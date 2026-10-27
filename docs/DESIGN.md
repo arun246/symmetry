@@ -273,12 +273,53 @@ runtime: <language set by the committee>
 their submission is even considered. This is recorded as a signed event. No
 acceptance, no entry — like signing a job form before you start.
 
+**A worker can step back.** On the legacy contract track, a worker who cannot
+finish a task can *nullify* their acceptance: they tick one or more reasons
+(`task-unclear`, `requirements-changed`, `cannot-test`, `not-enough-time`,
+`outside-skills`, `other`) and may add a comment, which is required for
+"other". The signed row is never deleted — it moves from `ACTIVE` to
+`WITHDRAWN`, keeps its hash, signature and agreements for audit, and is hidden
+from that worker's Legacy contracts list only. The contract stays published for
+everyone else and its lifecycle does not change. The choice is final: the same
+worker cannot accept that version again.
+
 ### How much the company reveals (disclosure tiers)
 
 - **L0** — only the shape and words. Cheapest to publish, hardest to help with.
 - **L1** — also a few made-up samples and a self-test kit. The **default**.
 - **L2** — also some redacted real examples. Best contributions, but the highest
   risk of leaking something. Use carefully.
+
+### The exercise authoring track
+
+The first working slice is deliberately smaller than the full `optimize` flow. It
+lets a publisher turn one public Java method into a practice task:
+
+1. Create a draft with a title, summary, deadline and complexity. The public
+   board shows a symbolic price tier (`$` to `$$$$`) derived from complexity, not
+   a money amount.
+2. Import a source file from a **public** GitHub repository. The default branch is
+   resolved to a commit SHA and that SHA is pinned. Private repositories wait for a
+   GitHub App.
+3. Pick a method or constructor. The server removes its body and replaces it with
+   `throw new UnsupportedOperationException("TODO");`.
+4. Add public tests (shown to workers) and hidden tests (publisher only).
+5. Publish. The task document includes the source pin, stubs, symbolic price
+   tier and public tests, and is signed by the worker on acceptance.
+6. A worker who has accepted a published task may publish **subtasks** from it.
+   A subtask is another exercise row with a parent, is authored by that worker,
+   and appears on the public board only after it is published. A worker cannot
+   accept a subtask they authored.
+7. A worker accepts with Ed25519, opens a workspace, runs the static check and
+   submits text. The workspace records the attempt; **it does not execute code**.
+
+Drafts are private. Hidden tests and original source content are visible only to
+an admin or a publisher in the exercise's organization. A worker in the same
+organization is not an owner. An accepted worker becomes an owner only of the
+subtasks they authored. The money amount is display-only and never shown on the
+public board: there is no escrow, payment or AI decision in this track yet.
+Runtime execution, judging and payment still require the KVM runner and the
+payment path described below.
 
 ---
 
@@ -387,9 +428,9 @@ full in [`NEW-BUILDS.md`](NEW-BUILDS.md).
 - **AI payment policy:** the contract states that an AI makes the first decision,
   the appeal window, the evidence it sees and the liability cap. Model name,
   version, prompt hash and output hash are stored with the decision.
-- **Licensing:** the runner agent and SDK are Apache-2.0; the control plane and AI
-  service are AGPL-3.0; support, updates, signing keys and holdouts are commercial
-  or private. See [ADR-0002](adr/0002-licensing.md).
+- **Licensing:** the whole repository — server, AI service, console, runner agent
+  and WASM SDK — is AGPL-3.0; support, updates, signing keys and holdouts are
+  commercial or private. See [ADR-0008](adr/0008-single-agpl-licence.md).
 - **Legal:** liability and indemnity terms, and which country's law applies, are
   set per contract. Automated payment decisions may create a right to explanation
   or human review in some jurisdictions; the one-appeal path is the answer.
@@ -428,6 +469,15 @@ Each of these is a "thing" the system remembers:
 - **TaskDocument** — the instructions a worker accepts.
 - **Acceptance** — the signed record that a specific worker accepted a specific
   task document.
+- **Exercise** — a publisher-authored practice task with a source pin, stubs,
+  tests, price and deadline.
+- **ExerciseSource** — the imported public-GitHub file, its commit SHA and its
+  secret-scan findings.
+- **ExerciseStub** — a method or constructor whose body was removed.
+- **ExerciseTest** — a public or hidden test attached to an exercise.
+- **ExerciseSubmission** — a worker's stored attempt and its static-check findings.
+- **ExerciseWorkspaceSession** — the deadline-bound workspace opened after
+  acceptance. It does not execute code in this version.
 - **DisclosureTier** — how much the company reveals (L0/L1/L2).
 - **Submission** — the source code, its language, its fingerprint, its signature,
   and which acceptance it belongs to.
@@ -465,6 +515,18 @@ of ways one program asks another program to do something.)
 POST /contracts                       publish a contract + task document
 GET  /contracts/{id}/workbench        fetch the public spec + sample data
 POST /contracts/{id}/accept           a worker accepts the task document (signed)
+POST /contracts/{id}/withdraw         a worker nullifies their own acceptance (reasons + comment)
+GET  /exercises                       public task list (the root page)
+POST /exercises                       create an exercise draft (publisher)
+POST /exercises/{id}/source           import a public GitHub Java file (publisher)
+GET  /exercises/{id}/symbols          list methods/constructors (publisher)
+POST /exercises/{id}/stubs            remove a symbol body (publisher)
+PUT  /exercises/{id}/tests            replace public/hidden tests (publisher)
+POST /exercises/{id}/publish          freeze the task document (publisher)
+POST /exercises/{id}/accept           worker signs the task document
+GET  /exercises/{id}/workspace        open the workspace (no execution)
+POST /exercises/{id}/static-check     syntax/forbidden-API check (worker)
+POST /exercises/{id}/submissions      store an attempt (worker)
 POST /submissions                     upload source {language, contractId, acceptanceId}
 GET  /submissions/{id}/build          build status + artifact fingerprint
 GET  /submissions/{id}/verdict        gate result + Pareto numbers (sanitized)
@@ -517,6 +579,10 @@ Each step has a clear "we are done when" test.
 2. **P1 Contract & task document (2–4 weeks).** Build one real contract and task
    document, with the acceptance flow. *Done when:* ten people can read it and
    correctly predict what will pass and what will fail, and acceptance is enforced.
+   - **P1b Exercise authoring (implemented).** Public-GitHub import, Java stub
+     extraction, public/hidden tests, signed acceptance and static checks. *Done
+     when:* a publisher can publish a task and a worker can submit an attempt.
+     Execution and payment remain in P2 and P4.
 3. **P2 Eval Fabric (4–8 weeks).** The build service (starting with Java, Rust and Python)
    via the toolchain registry, the KVM microVM and its inner runtime tiers, the
    checkpoints (properties, fuzzing, comparison, hidden questions), and the

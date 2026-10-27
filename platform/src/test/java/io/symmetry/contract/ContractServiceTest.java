@@ -28,6 +28,8 @@ import org.springframework.web.server.ResponseStatusException;
 import io.symmetry.build.JavaToolchain;
 import io.symmetry.build.RustToolchain;
 import io.symmetry.build.ToolchainRegistry;
+import io.symmetry.identity.Actor;
+import io.symmetry.identity.Role;
 import io.symmetry.task.LifecycleState;
 import io.symmetry.task.WorkKind;
 import tools.jackson.databind.JsonNode;
@@ -72,8 +74,10 @@ class ContractServiceTest {
     }
 
     private Contract sampleContract() {
-        return new Contract(UUID.randomUUID(), "module.image.resize", "1.0.0", "optimize",
+        Contract contract = new Contract(UUID.randomUUID(), "module.image.resize", "1.0.0", "optimize",
                 "java", "L1", WorkKind.COMPUTE, "task doc", "{}");
+        contract.publish();
+        return contract;
     }
 
     @Test
@@ -194,5 +198,112 @@ class ContractServiceTest {
         assertThat(saved.getAgreements()).contains("honesty").contains("scope");
         assertThat(contract.getLifecycleState()).isEqualTo(LifecycleState.ACCEPTED);
         verify(contracts).save(contract);
+    }
+
+    private Acceptance sampleAcceptance(Contract contract, String workerId) {
+        return new Acceptance(UUID.randomUUID(), contract.getId(), workerId, "hash", "sig", "pub",
+                true, "[\"honesty\",\"scope\"]");
+    }
+
+    private static Actor workerActor(String email) {
+        return new Actor(UUID.randomUUID(), email, "Worker", Role.WORKER, null, null);
+    }
+
+    private void givenAcceptance(Contract contract, Acceptance acceptance) {
+        when(acceptances.findByContractIdAndWorkerId(contract.getId(), acceptance.getWorkerId()))
+                .thenReturn(Optional.of(acceptance));
+    }
+
+    @Test
+    void withdrawNullifiesTheAcceptanceButKeepsTheSignedProof() {
+        Contract contract = sampleContract();
+        Acceptance acceptance = sampleAcceptance(contract, "worker@symmetry.local");
+        givenAcceptance(contract, acceptance);
+        when(acceptances.save(any(Acceptance.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        LifecycleState lifecycleBefore = contract.getLifecycleState();
+
+        WithdrawalView view = service.withdraw(contract.getId(),
+                new WithdrawRequest(List.of("task-unclear", "cannot-test"), "no reference suite"),
+                workerActor("worker@symmetry.local"));
+
+        assertThat(view.status()).isEqualTo("WITHDRAWN");
+        assertThat(view.reasons()).containsExactly("task-unclear", "cannot-test");
+        assertThat(view.comment()).isEqualTo("no reference suite");
+        assertThat(view.withdrawnAt()).isNotNull();
+
+        assertThat(acceptance.isWithdrawn()).isTrue();
+        assertThat(acceptance.getSignature()).isEqualTo("sig");
+        assertThat(acceptance.getWorkerPublicKey()).isEqualTo("pub");
+        assertThat(acceptance.getTaskDocumentHash()).isEqualTo("hash");
+        assertThat(acceptance.getAgreements()).contains("honesty").contains("scope");
+        // Nullifying one worker's acceptance never rewrites the contract lifecycle.
+        assertThat(contract.getLifecycleState()).isEqualTo(lifecycleBefore);
+        verify(acceptances).save(acceptance);
+    }
+
+    @Test
+    void withdrawRequiresARecordedReason() {
+        Contract contract = sampleContract();
+        Acceptance acceptance = sampleAcceptance(contract, "worker@symmetry.local");
+        givenAcceptance(contract, acceptance);
+
+        assertThatThrownBy(() -> service.withdraw(contract.getId(),
+                new WithdrawRequest(List.of("   "), null), workerActor("worker@symmetry.local")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("at least one reason");
+        verify(acceptances, never()).save(any());
+    }
+
+    @Test
+    void withdrawRejectsUnknownReasonCodes() {
+        Contract contract = sampleContract();
+        Acceptance acceptance = sampleAcceptance(contract, "worker@symmetry.local");
+        givenAcceptance(contract, acceptance);
+
+        assertThatThrownBy(() -> service.withdraw(contract.getId(),
+                new WithdrawRequest(List.of("bored"), null), workerActor("worker@symmetry.local")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Unknown reason");
+        verify(acceptances, never()).save(any());
+    }
+
+    @Test
+    void withdrawRequiresACommentWhenOtherIsSelected() {
+        Contract contract = sampleContract();
+        Acceptance acceptance = sampleAcceptance(contract, "worker@symmetry.local");
+        givenAcceptance(contract, acceptance);
+
+        assertThatThrownBy(() -> service.withdraw(contract.getId(),
+                new WithdrawRequest(List.of("other"), "   "), workerActor("worker@symmetry.local")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("other");
+        verify(acceptances, never()).save(any());
+    }
+
+    @Test
+    void withdrawIsRejectedTwice() {
+        Contract contract = sampleContract();
+        Acceptance acceptance = sampleAcceptance(contract, "worker@symmetry.local");
+        acceptance.withdraw("[\"not-enough-time\"]", null);
+        givenAcceptance(contract, acceptance);
+
+        assertThatThrownBy(() -> service.withdraw(contract.getId(),
+                new WithdrawRequest(List.of("cannot-test"), null), workerActor("worker@symmetry.local")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("already nullified");
+    }
+
+    @Test
+    void withdrawOnlyTouchesTheCallersOwnAcceptance() {
+        Contract contract = sampleContract();
+        when(acceptances.findByContractIdAndWorkerId(contract.getId(), "someone-else@symmetry.local"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.withdraw(contract.getId(),
+                new WithdrawRequest(List.of("cannot-test"), null), workerActor("someone-else@symmetry.local")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("No acceptance");
+        verify(acceptances, never()).save(any());
     }
 }

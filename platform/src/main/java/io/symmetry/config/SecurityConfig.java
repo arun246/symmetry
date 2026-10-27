@@ -69,6 +69,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/runners/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/runners/*/heartbeat",
                                 "/runners/*/lease", "/runners/*/results").permitAll()
+                        // The task list is the public index of the app.
+                        .requestMatchers(HttpMethod.GET, "/exercises", "/exercises/*").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt
                         .jwtAuthenticationConverter(keycloakRealmRoles())));

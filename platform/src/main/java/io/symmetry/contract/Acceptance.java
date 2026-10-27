@@ -47,6 +47,20 @@ public class Acceptance {
     @Column(nullable = false, columnDefinition = "jsonb")
     private String agreements;
 
+    /** ACTIVE while the acceptance stands; WITHDRAWN after the worker nullifies it. */
+    @Column(nullable = false, columnDefinition = "text")
+    private String status = "ACTIVE";
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "withdrawal_reasons", columnDefinition = "jsonb")
+    private String withdrawalReasons;
+
+    @Column(name = "withdrawal_comment", columnDefinition = "text")
+    private String withdrawalComment;
+
+    @Column(name = "withdrawn_at", columnDefinition = "timestamptz")
+    private Instant withdrawnAt;
+
     protected Acceptance() {
     }
 
@@ -96,5 +110,40 @@ public class Acceptance {
 
     public String getAgreements() {
         return agreements;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public boolean isWithdrawn() {
+        return "WITHDRAWN".equals(status);
+    }
+
+    public String getWithdrawalReasons() {
+        return withdrawalReasons;
+    }
+
+    public String getWithdrawalComment() {
+        return withdrawalComment;
+    }
+
+    public Instant getWithdrawnAt() {
+        return withdrawnAt;
+    }
+
+    /**
+     * Nullifies the acceptance. The caller validates and serializes the reasons;
+     * the signed proof (hash, signature, agreements) is left untouched so the
+     * record stays auditable.
+     */
+    public void withdraw(String reasonsJson, String comment) {
+        if (isWithdrawn()) {
+            throw new IllegalStateException("Acceptance is already withdrawn");
+        }
+        this.status = "WITHDRAWN";
+        this.withdrawalReasons = reasonsJson;
+        this.withdrawalComment = comment;
+        this.withdrawnAt = Instant.now();
     }
 }

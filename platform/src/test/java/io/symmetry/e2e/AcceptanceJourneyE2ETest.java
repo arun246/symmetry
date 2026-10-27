@@ -114,6 +114,13 @@ class AcceptanceJourneyE2ETest {
         String id = contract.get("id").asText();
         assertThat(contract.get("lifecycleState").asText()).isEqualTo("draft");
 
+        // 1b. The publisher releases the draft to the registry.
+        ResponseEntity<String> published = postJson(
+                "publisher@symmetry.local", "/contracts/" + id + "/publish", Map.of());
+        assertThat(published.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(mapper.readTree(published.getBody()).get("lifecycleState").asText())
+                .isEqualTo("negotiated");
+
         // 2. A worker browses the registry.
         JsonNode listed = getJson("/contracts?moduleId=" + MODULE);
         assertThat(listed.get("totalElements").asLong()).isGreaterThanOrEqualTo(1);
@@ -169,6 +176,8 @@ class AcceptanceJourneyE2ETest {
         body.put("moduleId", moduleId);
         body.put("version", "1.0.0");
         String id = mapper.readTree(postJson("/contracts", body).getBody()).get("id").asText();
+        assertThat(postJson("publisher@symmetry.local", "/contracts/" + id + "/publish", Map.of())
+                .getStatusCode()).isEqualTo(HttpStatus.OK);
 
         Map<String, Object> accept = new LinkedHashMap<>();
         accept.put("workerId", "worker-e2e");

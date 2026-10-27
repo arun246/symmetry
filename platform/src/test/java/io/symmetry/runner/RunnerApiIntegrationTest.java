@@ -196,6 +196,11 @@ class RunnerApiIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String contractId = read(created).get("id").asText();
 
+        mockMvc.perform(post("/contracts/{id}/publish", contractId)
+                        .header("X-Symmetry-User", "publisher@symmetry.local"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lifecycleState").value("negotiated"));
+
         KeyPair worker = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         String hash = MessageSigner.sha256(taskDocument);
         String message = MessageSigner.canonicalAcceptMessage(moduleId, "1.0.0", hash);

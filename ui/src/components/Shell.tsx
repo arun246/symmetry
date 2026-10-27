@@ -23,6 +23,7 @@ import {
   WalletIcon,
 } from "./icons";
 import { Badge, Loading } from "./ui";
+import { OverlayPane } from "./OverlayPane";
 
 type NavItem = {
   to: string;
@@ -32,7 +33,9 @@ type NavItem = {
 
 const workerNav: NavItem[] = [
   { to: "/user/overview", label: "Overview", icon: <GridIcon /> },
-  { to: "/user/contracts", label: "Browse contracts", icon: <FileIcon /> },
+  { to: "/user/exercises", label: "Task board", icon: <FileIcon /> },
+  { to: "/user/my-tasks", label: "My tasks", icon: <CheckIcon /> },
+  { to: "/user/contracts", label: "Legacy contracts", icon: <FileIcon /> },
   { to: "/user/acceptances", label: "My acceptances", icon: <CheckIcon /> },
   { to: "/user/submissions", label: "Submissions", icon: <UploadIcon /> },
   { to: "/user/earnings", label: "Earnings", icon: <WalletIcon /> },
@@ -41,6 +44,8 @@ const workerNav: NavItem[] = [
 
 const publisherNav: NavItem[] = [
   { to: "/user/overview", label: "Overview", icon: <GridIcon /> },
+  { to: "/user/exercises", label: "Task board", icon: <FileIcon /> },
+  { to: "/user/exercises/new", label: "Create task", icon: <UploadIcon /> },
   { to: "/user/contracts", label: "Contracts", icon: <FileIcon /> },
   { to: "/user/workers", label: "Workers", icon: <UsersIcon /> },
   { to: "/user/evaluations", label: "Evaluations", icon: <FlaskIcon /> },
@@ -79,10 +84,24 @@ export function Shell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [theme, setTheme] = useState<Theme>(getTheme());
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // The drawer is transient (close on click/focus into the page, and on
+  // navigation); it is no longer restored from localStorage per role.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
+  const focusMode = location.pathname.startsWith("/user/workspace/");
+
+  useEffect(() => {
+    document.body.classList.toggle("workspace-focus", focusMode);
+    return () => document.body.classList.remove("workspace-focus");
+  }, [focusMode]);
 
   useEffect(() => {
     document.title = "Symmetry";
@@ -113,8 +132,50 @@ export function Shell() {
     navigate(role === "ADMIN" ? "/user/admin/login" : "/user/login");
   };
 
+  const updateNav = (open: boolean) => {
+    setNavOpen(open);
+  };
+
+  const navigation = (
+    <>
+      <div className="brand">
+        <span className="brand-mark">S</span>
+        <span>{role === "ADMIN" ? "Admin" : "Symmetry"}</span>
+      </div>
+      <div className="nav-group">
+        <div className="nav-label">{role === "ADMIN" ? "Platform" : "Workspace"}</div>
+        {nav
+          .filter((item) => !item.to.endsWith("/settings"))
+          .map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={() => `nav-item${isActive(item, location.pathname) ? " active" : ""}`}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+      </div>
+      {role !== "ADMIN" && (
+        <div className="nav-group">
+          <div className="nav-label">Account</div>
+          <NavLink
+            to="/user/settings"
+            className={() =>
+              `nav-item${isActive(nav[nav.length - 1], location.pathname) ? " active" : ""}`
+            }
+          >
+            <GearIcon />
+            <span>Settings</span>
+          </NavLink>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div className="window">
+    <div className={`window${focusMode ? " workspace-focus" : ""}`}>
       <div className="titlebar">
         <span className="titlebar-title">Symmetry</span>
         <span className="titlebar-sep" />
@@ -135,42 +196,18 @@ export function Shell() {
           </button>
         </div>
       </div>
-      <div className="body">
-        <nav className="sidebar" aria-label="Primary">
-          <div className="brand">
-            <span className="brand-mark">S</span>
-            <span>{role === "ADMIN" ? "Admin" : "Symmetry"}</span>
-          </div>
-          <div className="nav-group">
-            <div className="nav-label">{role === "ADMIN" ? "Platform" : "Workspace"}</div>
-            {nav
-              .filter((item) => !item.to.endsWith("/settings"))
-              .map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={() => `nav-item${isActive(item, location.pathname) ? " active" : ""}`}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </NavLink>
-              ))}
-          </div>
-          {role !== "ADMIN" && (
-            <div className="nav-group">
-              <div className="nav-label">Account</div>
-              <NavLink
-                to="/user/settings"
-                className={() =>
-                  `nav-item${isActive(nav[nav.length - 1], location.pathname) ? " active" : ""}`
-                }
-              >
-                <GearIcon />
-                <span>Settings</span>
-              </NavLink>
-            </div>
-          )}
-        </nav>
+      <div className={`body${role === "ADMIN" ? "" : " body-nav-overlay"}`}>
+        {role === "ADMIN" ? (
+          <nav className="sidebar" aria-label="Primary">
+            {navigation}
+          </nav>
+        ) : (
+          <OverlayPane label="Menu" open={navOpen} onOpenChange={updateNav}>
+            <nav className="sidebar" aria-label="Primary">
+              {navigation}
+            </nav>
+          </OverlayPane>
+        )}
         <main className="content">
           <Outlet />
         </main>
